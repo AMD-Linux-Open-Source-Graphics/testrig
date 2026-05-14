@@ -1,0 +1,12 @@
+# vim swap files
+.*.swp
+
+# various python-related bits that shouldn't be in git
+.*.py.[co]
+*__pycache__
+
+# ignore ruff
+.ruff_cache
+
+# ignore pytest
+.pytest_cache

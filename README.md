@@ -10,6 +10,30 @@ Testrig has two basic commands: run and check
   * `check` will look for packages declared as required and attempt to install any missing packages
   * `run` runs the tests after running the same process as `check`
 
+## Code Formatting
+
+All python code is formatted with [ruff](https://docs.astral.sh/ruff/formatter/)
+
+## AI Code Policy
+
+All contributors are responsible for code that is submitted in their name. Contributions assisted by AI tools is allowed
+but such changes must have an `Assisted-by:` tag in the commit message following [the format declared by the Linux kernel](https://docs.kernel.org/process/coding-assistants.html#attribution)
+
+`Assisted-by: AGENT_NAME:MODEL_VERSION [TOOL1] [TOOL2]`
+
+Where:
+
+  * `AGENT_NAME` is the name of the AI tool or framework
+  * `MODEL_VERSION` is the specific model version used
+  * `[TOOL1] [TOOL2]` are optional specialized analysis tools used (e.g., coccinelle, sparse, smatch, clang-tidy)
+
+Basic development tools (git, gcc, make, editors) should not be listed.
+
+Example:
+
+`Assisted-by: Claude:claude-3-opus coccinelle sparse`
+
+
 ## Input Format
 
 Testrig uses [TOML](https://toml.io/en/) for declaring rig information. The exact format should be considered unstable and likely to change between releases.

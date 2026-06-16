@@ -31,21 +31,21 @@ class TestRig:
     no_root = False
     workdir = None
 
-    def __init__(self, name, config, dry_run):
+    def __init__(self, name, spec, dry_run):
         self.name = name
-        self.config = config
+        self.rig_spec = spec
         self.dry_run = dry_run
 
-        # TODO derive data from config
+        # TODO derive data from rig_spec
 
     def _setup(self):
         self.distro = get_distro(no_root=self.no_root)
 
-        if self.distro.name not in self.config.keys():
+        if self.distro.name not in self.rig_spec.keys():
             print("no distro specified, assuming test binary is in $PATH", flush=True)
             self.binary_path = os.path.abspath(".")
         else:
-            self.binary_path = os.path.abspath(self.config[self.distro.name]["test_binary_path"])
+            self.binary_path = os.path.abspath(self.rig_spec[self.distro.name]["test_binary_path"])
 
         # create tempdir
         self.workdir = tempfile.mkdtemp()
@@ -81,10 +81,10 @@ class TestRig:
         if self.distro is None:
             self._setup()
 
-        if self.distro.name not in self.config.keys():
+        if self.distro.name not in self.rig_spec.keys():
             print("no distro information specified, not checking for any packages", flush=True)
         else:
-            required_package = self.config[self.distro.name]["test_package_name"]
+            required_package = self.rig_spec[self.distro.name]["test_package_name"]
 
             do_install_missing_packages = not self.dry_run
             if self.distro.check_for_installed_packages(
@@ -99,8 +99,8 @@ class TestRig:
 
     def _execute_binary(self, binary_path):
         run_command = [binary_path]
-        if "extra_args" in self.config.keys():
-            run_command.extend(self.config["extra_args"])
+        if "extra_args" in self.rig_spec.keys():
+            run_command.extend(self.rig_spec["extra_args"])
         print("", flush=True)
 
         print("", flush=True)
@@ -168,10 +168,10 @@ class TestRig:
         # note - apt and/or dpkg doesn't install debug symbols for dependent packages
         # this code is going to have to get smarter (look for deps) or this will need to be a package list and it'll
         # be up to the user to specify all the debug packages
-        if self.distro.name not in self.config.keys():
+        if self.distro.name not in self.rig_spec.keys():
             print("no distro information specified, not checking for any packages", flush=True)
         else:
-            required_packages = self.config[self.distro.name]["test_debug_package_names"]
+            required_packages = self.rig_spec[self.distro.name]["test_debug_package_names"]
 
             if self.distro.check_for_installed_packages(required_packages, install_if_not_present=True):
                 print('required debug package "{}" is installed.'.format(" ".join(required_packages)), flush=True)

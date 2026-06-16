@@ -22,10 +22,10 @@ from testrig.rig import parse_rig, TestRig
 # --------------------------------------------------------------------------
 
 
-def make_rig(name="testrun", config=None, dry_run=False):
-    if config is None:
-        config = {"name": name}
-    return TestRig(name, config, dry_run)
+def make_rig(name="testrun", spec=None, dry_run=False):
+    if spec is None:
+        spec = {"name": name}
+    return TestRig(name, spec, dry_run)
 
 
 def make_mock_distro(name="ubuntu"):
@@ -58,8 +58,8 @@ class TestParseRun:
 
         assert isinstance(result, TestRig)
         assert result.name == "mytest"
-        assert result.config["name"] == "mytest"
-        assert result.config["ubuntu"]["test_binary_path"] == "/opt/bin"
+        assert result.rig_spec["name"] == "mytest"
+        assert result.rig_spec["ubuntu"]["test_binary_path"] == "/opt/bin"
         assert result.dry_run is False
 
     def test_valid_toml_with_dry_run(self, tmp_path):
@@ -87,15 +87,15 @@ class TestParseRun:
 class TestSetup:
     @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake-workdir")
     @patch("testrig.rig.get_distro")
-    def test_sets_distro_and_binary_path_from_config(self, mock_get_distro, mock_mkdtemp):
+    def test_sets_distro_and_binary_path_from_spec(self, mock_get_distro, mock_mkdtemp):
         mock_distro = make_mock_distro("ubuntu")
         mock_get_distro.return_value = mock_distro
 
-        config = {
+        spec = {
             "name": "test1",
             "ubuntu": {"test_binary_path": "/opt/rocm/bin", "test_package_name": "pkg"},
         }
-        run = make_rig(config=config)
+        run = make_rig(spec=spec)
         run._setup()
 
         assert run.distro is mock_distro
@@ -105,12 +105,12 @@ class TestSetup:
 
     @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake-workdir")
     @patch("testrig.rig.get_distro")
-    def test_defaults_binary_path_when_no_distro_config(self, mock_get_distro, mock_mkdtemp, capsys):
+    def test_defaults_binary_path_when_no_distro_spec(self, mock_get_distro, mock_mkdtemp, capsys):
         mock_distro = make_mock_distro("ubuntu")
         mock_get_distro.return_value = mock_distro
 
-        config = {"name": "test2"}
-        run = make_rig(config=config)
+        spec = {"name": "test2"}
+        run = make_rig(spec=spec)
         run._setup()
 
         assert run.binary_path == os.path.abspath(".")
@@ -122,7 +122,7 @@ class TestSetup:
     def test_passes_no_root_to_get_distro(self, mock_get_distro, mock_mkdtemp):
         mock_get_distro.return_value = make_mock_distro("ubuntu")
 
-        run = make_rig(config={"name": "test3"})
+        run = make_rig(spec={"name": "test3"})
         run.no_root = True
         run._setup()
 
@@ -140,11 +140,11 @@ class TestVerifyPackages:
         distro.check_for_installed_packages.return_value = True
         distro.get_package_info.return_value = "1.2.3-1"
 
-        config = {
+        spec = {
             "name": "test",
             "ubuntu": {"test_binary_path": "/bin", "test_package_name": "mypkg"},
         }
-        run = make_rig(config=config)
+        run = make_rig(spec=spec)
         run.distro = distro
 
         run.verify_packages()
@@ -160,11 +160,11 @@ class TestVerifyPackages:
         distro.check_for_installed_packages.return_value = True
         distro.get_package_info.return_value = "1.2.3-1"
 
-        config = {
+        spec = {
             "name": "test",
             "ubuntu": {"test_binary_path": "/bin", "test_package_name": "mypkg"},
         }
-        run = make_rig(config=config, dry_run=True)
+        run = make_rig(spec=spec, dry_run=True)
         run.distro = distro
 
         run.verify_packages()
@@ -172,9 +172,9 @@ class TestVerifyPackages:
         # dry_run=True → do_install_missing_packages = not True = False
         distro.check_for_installed_packages.assert_called_once_with(["mypkg"], install_if_not_present=False)
 
-    def test_no_distro_in_config(self, capsys):
+    def test_no_distro_in_spec(self, capsys):
         distro = make_mock_distro("ubuntu")
-        run = make_rig(config={"name": "test"})
+        run = make_rig(spec={"name": "test"})
         run.distro = distro
 
         run.verify_packages()
@@ -183,7 +183,7 @@ class TestVerifyPackages:
         assert "no distro information specified" in captured.out
 
     def test_initializes_distro_if_none(self):
-        run = make_rig(config={"name": "test"})
+        run = make_rig(spec={"name": "test"})
         run.distro = None
 
         with patch.object(run, "_setup") as mock_init:
@@ -225,8 +225,8 @@ class TestExecuteBinary:
     @patch("testrig.rig.subprocess.run")
     def test_extra_args_appended(self, mock_subproc):
         mock_subproc.return_value = MagicMock(returncode=0)
-        config = {"name": "test", "extra_args": ["--gtest_filter=Foo", "--verbose"]}
-        run = make_rig(config=config)
+        spec = {"name": "test", "extra_args": ["--gtest_filter=Foo", "--verbose"]}
+        run = make_rig(spec=spec)
 
         run._execute_binary("/fake/bin/test_a")
 
@@ -257,7 +257,7 @@ class TestScanBinaries:
     def test_excludes_files_with_extensions(self, mock_scandir):
         mock_scandir.return_value = [
             make_mock_direntry("test_foo", is_file=True, path="/bin/test_foo"),
-            make_mock_direntry("config.yaml", is_file=True, path="/bin/config.yaml"),
+            make_mock_direntry("spec.yaml", is_file=True, path="/bin/spec.yaml"),
             make_mock_direntry("readme.txt", is_file=True, path="/bin/readme.txt"),
         ]
         run = make_rig()
@@ -403,11 +403,11 @@ class TestExecute:
 
         mock_subproc.return_value = MagicMock(returncode=0)
 
-        config = {
+        spec = {
             "name": "test",
             "ubuntu": {"test_binary_path": "/opt/bin", "test_package_name": "mypkg"},
         }
-        run = make_rig(config=config)
+        run = make_rig(spec=spec)
 
         with patch("testrig.rig.os.scandir") as mock_scandir:
             mock_scandir.return_value = [
@@ -430,7 +430,7 @@ class TestExecute:
         mock_get_distro.return_value = mock_distro
         mock_subproc.return_value = MagicMock(returncode=0)
 
-        config = {
+        spec = {
             "name": "test",
             "ubuntu": {
                 "test_binary_path": "/opt/bin",
@@ -438,7 +438,7 @@ class TestExecute:
                 "test_debug_package_names": ["mypkg-dbg"],
             },
         }
-        run = make_rig(config=config)
+        run = make_rig(spec=spec)
 
         with patch("testrig.rig.os.scandir") as mock_scandir:
             mock_scandir.return_value = [
@@ -454,9 +454,9 @@ class TestExecute:
 
 
 class TestVerifyDebugPackages:
-    def test_no_distro_in_config(self, capsys):
+    def test_no_distro_in_spec(self, capsys):
         distro = make_mock_distro("ubuntu")
-        run = make_rig(config={"name": "test"})
+        run = make_rig(spec={"name": "test"})
         run.distro = distro
 
         run.verify_debug_packages()
@@ -468,7 +468,7 @@ class TestVerifyDebugPackages:
         distro = make_mock_distro("ubuntu")
         distro.check_for_installed_packages.return_value = True
 
-        config = {
+        spec = {
             "name": "test",
             "ubuntu": {
                 "test_binary_path": "/bin",
@@ -476,7 +476,7 @@ class TestVerifyDebugPackages:
                 "test_debug_package_names": ["pkg-dbg", "lib-dbg"],
             },
         }
-        run = make_rig(config=config)
+        run = make_rig(spec=spec)
         run.distro = distro
 
         run.verify_debug_packages()
@@ -499,7 +499,7 @@ class TestGatherDebugInfo:
         distro = make_mock_distro("ubuntu")
         distro.check_for_installed_packages.return_value = True
 
-        config = {
+        spec = {
             "name": "test",
             "ubuntu": {
                 "test_binary_path": "/bin",
@@ -507,7 +507,7 @@ class TestGatherDebugInfo:
                 "test_debug_package_names": ["pkg-dbg"],
             },
         }
-        run = make_rig(config=config)
+        run = make_rig(spec=spec)
         run.distro = distro
         run.workdir = str(tmp_path)
 
@@ -532,7 +532,7 @@ class TestGatherDebugInfo:
         distro = make_mock_distro("ubuntu")
         distro.check_for_installed_packages.return_value = True
 
-        config = {
+        spec = {
             "name": "test",
             "ubuntu": {
                 "test_binary_path": "/bin",
@@ -540,7 +540,7 @@ class TestGatherDebugInfo:
                 "test_debug_package_names": ["pkg-dbg"],
             },
         }
-        run = make_rig(config=config)
+        run = make_rig(spec=spec)
         run.distro = distro
         run.workdir = str(tmp_path)
 

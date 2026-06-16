@@ -50,7 +50,7 @@ def run_test(ctx, no_debug):
     rig = parse_rig(ctx.obj["input_path"], dry_run=ctx.obj["dry_run"])
     rig.no_root = ctx.obj["no_root"]
 
-    pprint(rig.config)
+    pprint(rig.rig_spec)
 
     results = rig.execute(force_debug=ctx.obj["debug"])
 

@@ -9,6 +9,7 @@ import sys
 import click
 
 from .rig import parse_rig
+from .settings import load_settings
 
 
 @click.group()
@@ -31,6 +32,7 @@ def cli(ctx, run_directory, filename, debug, no_root, dry_run):
     ctx.obj["debug"] = debug
     ctx.obj["no_root"] = no_root
     ctx.obj["dry_run"] = dry_run
+    ctx.obj["settings"] = load_settings()
 
     input_path = os.path.abspath(os.path.join(run_directory, filename))
     if not os.path.exists(input_path):
@@ -52,10 +54,14 @@ def run_test(ctx, no_debug):
 
     pprint(rig.rig_spec)
 
-    results = rig.execute(force_debug=ctx.obj["debug"])
+    disable_debug = ctx.obj["settings"]["disable_debug"]
+    if disable_debug and ctx.obj["debug"]:
+        print("debug runs are disabled by global settings, ignoring --debug")
+
+    results = rig.execute(force_debug=ctx.obj["debug"] and not disable_debug)
 
     if len(results["failed"]) > 0:
-        if not no_debug:
+        if not no_debug and not disable_debug:
             rig.gather_debug_info(results["failed"])
 
         print("FAILED TESTS DETECTED: exiting with return code 1")

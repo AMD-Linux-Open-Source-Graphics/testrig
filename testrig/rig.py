@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from datetime import datetime
 import os
 import subprocess
 import tempfile
@@ -30,6 +31,7 @@ class Rig:
     distro = None
     no_root = False
     workdir = None
+    start_time = None
 
     def __init__(self, name, spec, dry_run):
         self.name = name
@@ -220,6 +222,7 @@ class Rig:
                 print("", flush=True)
 
     def execute(self, force_debug=False):
+        self.start_time = datetime.now()
         print("Running test for {}".format(self.name), flush=True)
 
         print("================================================================================", flush=True)
@@ -254,4 +257,9 @@ class Rig:
         print("================================================================================", flush=True)
         print("run complete", flush=True)
         print("================================================================================", flush=True)
+        runtime = datetime.now() - self.start_time
+        print("", flush=True)
+        print("Rig run started at: {}".format(self.start_time.strftime("%Y-%m-%d %H:%M:%S")), flush=True)
+        print("Rig run completed at: {}".format((self.start_time + runtime).strftime("%Y-%m-%d %H:%M:%S")), flush=True)
+        print("Total runtime: {}".format(runtime), flush=True)
         return run_result

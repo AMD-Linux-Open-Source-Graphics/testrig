@@ -22,10 +22,10 @@ def parse_rig(inputfile_path, dry_run=False):
     for field_name in REQUIRED_FIELDS:
         if field_name not in file_data:
             raise Exception('Field "{}" is required but not found in {}'.format(field_name, inputfile_path))
-    return TestRig(file_data["name"], file_data, dry_run)
+    return Rig(file_data["name"], file_data, dry_run)
 
 
-class TestRig:
+class Rig:
     test_binaries = None
     distro = None
     no_root = False

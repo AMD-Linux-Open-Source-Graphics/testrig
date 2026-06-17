@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from testrig.rig import parse_rig, TestRig
+from testrig.rig import parse_rig, Rig
 
 
 # --------------------------------------------------------------------------
@@ -25,7 +25,7 @@ from testrig.rig import parse_rig, TestRig
 def make_rig(name="testrun", spec=None, dry_run=False):
     if spec is None:
         spec = {"name": name}
-    return TestRig(name, spec, dry_run)
+    return Rig(name, spec, dry_run)
 
 
 def make_mock_distro(name="ubuntu"):
@@ -56,7 +56,7 @@ class TestParseRun:
 
         result = parse_rig(str(toml_file))
 
-        assert isinstance(result, TestRig)
+        assert isinstance(result, Rig)
         assert result.name == "mytest"
         assert result.rig_spec["name"] == "mytest"
         assert result.rig_spec["ubuntu"]["test_binary_path"] == "/opt/bin"

@@ -15,6 +15,8 @@ SETTINGS_PATHS = [
 DEFAULT_SETTINGS = {
     # disable gathering of debug information (gdb runs) on failed tests
     "disable_debug": False,
+    # GPU UUID(s) to expose during test execution; empty means no override
+    "ROCR_VISIBLE_DEVICES": "",
 }
 
 

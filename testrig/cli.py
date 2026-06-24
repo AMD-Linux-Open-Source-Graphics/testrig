@@ -49,7 +49,7 @@ def cli(ctx, run_directory, filename, debug, no_root, dry_run):
 def run_test(ctx, no_debug):
 
     print("Running test: {}".format(ctx.obj["filename"]))
-    rig = parse_rig(ctx.obj["input_path"], dry_run=ctx.obj["dry_run"])
+    rig = parse_rig(ctx.obj["input_path"], dry_run=ctx.obj["dry_run"], settings=ctx.obj["settings"])
     rig.no_root = ctx.obj["no_root"]
 
     pprint(rig.rig_spec)
@@ -74,7 +74,7 @@ def run_test(ctx, no_debug):
 @click.pass_context
 def check_install(ctx, ignore_debug_packages, ignore_test_packages):
     print("running install check for {}".format(ctx.obj["input_path"]))
-    rig = parse_rig(ctx.obj["input_path"])
+    rig = parse_rig(ctx.obj["input_path"], settings=ctx.obj["settings"])
     rig.no_root = ctx.obj["no_root"]
 
     if not ignore_test_packages:

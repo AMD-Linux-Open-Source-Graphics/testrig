@@ -21,6 +21,7 @@ class TestLoadSettings:
 
         assert settings == DEFAULT_SETTINGS
         assert settings["disable_debug"] is False
+        assert settings["ROCR_VISIBLE_DEVICES"] == ""
 
     def test_does_not_mutate_default_settings(self, tmp_path):
         path = write_toml(tmp_path / "settings.toml", "disable_debug = true\n")
@@ -58,4 +59,12 @@ class TestLoadSettings:
         settings = load_settings(paths=[path])
 
         assert settings["disable_debug"] is False
+        assert settings["ROCR_VISIBLE_DEVICES"] == ""
         assert settings["unknown_option"] == 42
+
+    def test_loads_rocr_visible_devices_from_file(self, tmp_path):
+        path = write_toml(tmp_path / "settings.toml", 'ROCR_VISIBLE_DEVICES = "GPU-123"\n')
+
+        settings = load_settings(paths=[path])
+
+        assert settings["ROCR_VISIBLE_DEVICES"] == "GPU-123"

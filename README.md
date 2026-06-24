@@ -10,6 +10,13 @@ Testrig has two basic commands: run and check
   * `check` will look for packages declared as required and attempt to install any missing packages
   * `run` runs the tests after running the same process as `check`
 
+## Global Settings
+
+Testrig reads optional global settings from `/etc/testrig/settings.toml` and `~/.config/testrig/settings.toml`.
+
+`ROCR_VISIBLE_DEVICES` can be set to a GPU UUID (or list accepted by ROCr, see [GPU Isolation Techniques](https://rocm.docs.amd.com/en/latest/conceptual/gpu-isolation.html#rocr-visible-devices)) to control GPU visibility during test binary execution.
+By default this setting is empty. When empty, testrig takes no additional action.
+
 ## Code Formatting
 
 All python code is formatted with [ruff](https://docs.astral.sh/ruff/formatter/)

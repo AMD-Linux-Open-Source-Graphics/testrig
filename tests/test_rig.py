@@ -71,6 +71,15 @@ class TestParseRun:
         assert result.dry_run is True
         assert result.name == "drytest"
 
+    def test_passes_settings_to_rig(self, tmp_path):
+        toml_file = tmp_path / "runtest.toml"
+        toml_file.write_bytes(b'name = "settingstest"\n')
+        settings = {"ROCR_VISIBLE_DEVICES": "GPU-abc"}
+
+        result = parse_rig(str(toml_file), settings=settings)
+
+        assert result.settings["ROCR_VISIBLE_DEVICES"] == "GPU-abc"
+
     def test_missing_name_field_raises(self, tmp_path):
         toml_file = tmp_path / "runtest.toml"
         toml_file.write_bytes(b'[ubuntu]\ntest_binary_path = "/opt/bin"\n')
@@ -211,7 +220,8 @@ class TestExecuteBinary:
         result = run._execute_binary("/fake/bin/test_a")
 
         assert result is True
-        mock_subproc.assert_called_once_with(["/fake/bin/test_a"], check=False, stderr=subprocess.STDOUT)
+        expected_env = os.environ.copy()
+        mock_subproc.assert_called_once_with(["/fake/bin/test_a"], check=False, stderr=subprocess.STDOUT, env=expected_env)
 
     @patch("testrig.rig.subprocess.run")
     def test_fail_returns_false(self, mock_subproc):
@@ -231,7 +241,25 @@ class TestExecuteBinary:
         run._execute_binary("/fake/bin/test_a")
 
         expected_cmd = ["/fake/bin/test_a", "--gtest_filter=Foo", "--verbose"]
-        mock_subproc.assert_called_once_with(expected_cmd, check=False, stderr=subprocess.STDOUT)
+        expected_env = os.environ.copy()
+        mock_subproc.assert_called_once_with(expected_cmd, check=False, stderr=subprocess.STDOUT, env=expected_env)
+
+    @patch("testrig.rig.subprocess.run")
+    def test_sets_rocr_visible_devices_when_configured(self, mock_subproc):
+        mock_subproc.return_value = MagicMock(returncode=0)
+        run = make_rig(spec={"name": "test"})
+        run.settings = {"ROCR_VISIBLE_DEVICES": "GPU-123"}
+
+        run._execute_binary("/fake/bin/test_a")
+
+        expected_env = os.environ.copy()
+        expected_env["ROCR_VISIBLE_DEVICES"] = "GPU-123"
+        mock_subproc.assert_called_once_with(
+            ["/fake/bin/test_a"],
+            check=False,
+            stderr=subprocess.STDOUT,
+            env=expected_env,
+        )
 
 
 # ==========================================================================

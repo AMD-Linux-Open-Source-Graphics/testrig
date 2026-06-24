@@ -14,7 +14,7 @@ from .util import get_distro
 REQUIRED_FIELDS = ["name"]
 
 
-def parse_rig(inputfile_path, dry_run=False):
+def parse_rig(inputfile_path, dry_run=False, settings=None):
     file_data = None
 
     with open(inputfile_path, "rb") as input_file:
@@ -23,7 +23,7 @@ def parse_rig(inputfile_path, dry_run=False):
     for field_name in REQUIRED_FIELDS:
         if field_name not in file_data:
             raise Exception('Field "{}" is required but not found in {}'.format(field_name, inputfile_path))
-    return Rig(file_data["name"], file_data, dry_run)
+    return Rig(file_data["name"], file_data, dry_run, settings=settings)
 
 
 class Rig:
@@ -33,10 +33,11 @@ class Rig:
     workdir = None
     start_time = None
 
-    def __init__(self, name, spec, dry_run):
+    def __init__(self, name, spec, dry_run, settings=None):
         self.name = name
         self.rig_spec = spec
         self.dry_run = dry_run
+        self.settings = settings or {}
 
         # TODO derive data from rig_spec
 
@@ -111,7 +112,12 @@ class Rig:
         print("------------------------------------------------------------", flush=True)
         print("running command: '{}'".format(" ".join(run_command)), flush=True)
         print("", flush=True)
-        process = subprocess.run(run_command, check=False, stderr=subprocess.STDOUT)
+        run_env = os.environ.copy()
+        rocr_visible_devices = self.settings.get("ROCR_VISIBLE_DEVICES", "")
+        if rocr_visible_devices:
+            run_env["ROCR_VISIBLE_DEVICES"] = rocr_visible_devices
+
+        process = subprocess.run(run_command, check=False, stderr=subprocess.STDOUT, env=run_env)
         print("", flush=True)
 
         if process.returncode == 0:
@@ -257,9 +263,11 @@ class Rig:
         print("================================================================================", flush=True)
         print("run complete", flush=True)
         print("================================================================================", flush=True)
-        runtime = datetime.now() - self.start_time
         print("", flush=True)
+
+        runtime = datetime.now() - self.start_time
         print("Rig run started at: {}".format(self.start_time.strftime("%Y-%m-%d %H:%M:%S")), flush=True)
         print("Rig run completed at: {}".format((self.start_time + runtime).strftime("%Y-%m-%d %H:%M:%S")), flush=True)
         print("Total runtime: {}".format(runtime), flush=True)
+
         return run_result

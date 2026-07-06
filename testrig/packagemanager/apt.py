@@ -2,23 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
-import os
 import subprocess
 
+from testrig.packagemanager import PackageManager
 
-class AptPackageManager:
-    def __init__(self, no_root=False):
-        super().__init__()
 
-    def _check_root(self):
-        # check if user is root
-        if not self.no_root and os.geteuid() != 0:
-            raise Exception("running as non-root user is not supported. detected uid: {}".format(os.geteuid()))
-
-    def _run_command(self, command):
-        process = subprocess.run(command, check=False, capture_output=True)
-        return process.stdout.decode("utf-8")
-
+class AptPackageManager(PackageManager):
     def is_installed(self, package_name):
         command = ["dpkg-query", "-W", "-f=${Version}", package_name]
         try:

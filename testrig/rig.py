@@ -53,6 +53,16 @@ class Rig:
         # create tempdir
         self.workdir = tempfile.mkdtemp()
 
+    def _build_run_env(self):
+        run_env = os.environ.copy()
+        rocr_visible_devices = self.settings.get("ROCR_VISIBLE_DEVICES", "")
+        if rocr_visible_devices:
+            run_env["ROCR_VISIBLE_DEVICES"] = rocr_visible_devices
+        return run_env
+
+    def _run_command(self, command, check=False):
+        return subprocess.run(command, check=check, stderr=subprocess.STDOUT, env=self._build_run_env())
+
     def _gather_rocm_info(self):
         print("--------------------------------------------------------------------------------", flush=True)
         print("rocminfo", flush=True)
@@ -60,7 +70,7 @@ class Rig:
         print("", flush=True)
 
         if not self.dry_run:
-            process = subprocess.run(["rocminfo"], check=True)
+            process = self._run_command(["rocminfo"], check=True)
             if process.returncode != 0:
                 raise Exception("rocminfo failed - returncode {}".format(process.returncode))
             print("", flush=True)
@@ -112,12 +122,8 @@ class Rig:
         print("------------------------------------------------------------", flush=True)
         print("running command: '{}'".format(" ".join(run_command)), flush=True)
         print("", flush=True)
-        run_env = os.environ.copy()
-        rocr_visible_devices = self.settings.get("ROCR_VISIBLE_DEVICES", "")
-        if rocr_visible_devices:
-            run_env["ROCR_VISIBLE_DEVICES"] = rocr_visible_devices
 
-        process = subprocess.run(run_command, check=False, stderr=subprocess.STDOUT, env=run_env)
+        process = self._run_command(run_command)
         print("", flush=True)
 
         if process.returncode == 0:
@@ -221,7 +227,7 @@ class Rig:
             gdb_command = ["gdb", "--batch", "--command={}".format(gdb_batch_file_path), failed_binary]
             print("gdb command: {}".format(" ".join(gdb_command)), flush=True)
             print("", flush=True)
-            process = subprocess.run(gdb_command, check=False, stderr=subprocess.STDOUT)
+            process = self._run_command(gdb_command)
             print("", flush=True)
             if process.returncode != 0:
                 print("gdb failed for {} with return code {}".format(failed_binary, process.returncode), flush=True)

@@ -63,6 +63,16 @@ class TestGetDistro:
         assert result.no_root is True
 
     @patch("builtins.open", mock_open(read_data=fake_os_release("fedora", "39")))
+    def test_returns_fedora_distro_on_fedora(self):
+        from testrig.distro.fedora import FedoraDistro
+        from testrig.util import get_distro
+
+        result = get_distro(no_root=True)
+
+        assert isinstance(result, FedoraDistro)
+        assert result.name == "fedora"
+
+    @patch("builtins.open", mock_open(read_data=fake_os_release("arch", "rolling")))
     def test_raises_on_unsupported_distro(self):
         from testrig.util import get_distro
 
@@ -123,16 +133,13 @@ class TestUbuntuDistroInitialize:
 
         assert isinstance(distro.package_manager, AptPackageManager)
 
-    def test_apt_package_manager_no_root_bug(self):
-        """BUG: AptPackageManager.__init__ does not store no_root.
-        self.no_root is never set on the AptPackageManager instance."""
+    def test_apt_package_manager_stores_no_root(self):
+        """AptPackageManager inherits __init__ from PackageManager, which
+        stores no_root on the instance."""
         distro = make_ubuntu_distro(no_root=True)
         distro._init_package_manager()
 
-        assert (
-            not hasattr(distro.package_manager, "no_root")
-            or getattr(distro.package_manager, "no_root", "MISSING") == "MISSING"
-        )
+        assert distro.package_manager.no_root is True
 
 
 # ==========================================================================
@@ -275,20 +282,18 @@ class TestUbuntuDistroStubs:
 
 
 class TestAptPackageManagerCheckRoot:
-    def test_constructor_does_not_store_no_root(self):
-        """BUG: no_root parameter is accepted but never stored as self.no_root.
-        Any call to _initialize_() will raise AttributeError."""
+    def test_constructor_stores_no_root(self):
+        """no_root is stored as self.no_root by the PackageManager base class."""
         pm = AptPackageManager(no_root=True)
-        assert not hasattr(pm, "no_root")
+        assert pm.no_root is True
 
-    def test_initialize_raises_attribute_error_due_to_missing_no_root(self):
-        """BUG: Because __init__ doesn't store no_root, _initialize_() fails."""
+    def test_check_root_skipped_when_no_root_true(self):
+        """With no_root=True, _check_root() short-circuits and does not raise."""
         pm = AptPackageManager(no_root=True)
 
-        with pytest.raises(AttributeError):
-            pm._check_root()
+        assert pm._check_root() is None
 
-    @patch("testrig.packagemanager.apt.os.geteuid", return_value=0)
+    @patch("testrig.packagemanager.os.geteuid", return_value=0)
     def test_initialize_with_manually_set_no_root_false_as_root(self, mock_euid):
         """If no_root is manually patched onto the instance, _initialize_
         works when running as root (euid=0)."""
@@ -298,7 +303,7 @@ class TestAptPackageManagerCheckRoot:
         pm._check_root()
         mock_euid.assert_called_once()
 
-    @patch("testrig.packagemanager.apt.os.geteuid", return_value=1000)
+    @patch("testrig.packagemanager.os.geteuid", return_value=1000)
     def test_initialize_non_root_raises(self, mock_euid):
         """When no_root=False and euid!=0, raises."""
         pm = AptPackageManager()
@@ -307,7 +312,7 @@ class TestAptPackageManagerCheckRoot:
         with pytest.raises(Exception, match="running as non-root user is not supported"):
             pm._check_root()
 
-    @patch("testrig.packagemanager.apt.os.geteuid", return_value=1000)
+    @patch("testrig.packagemanager.os.geteuid", return_value=1000)
     def test_initialize_with_no_root_true_skips_check(self, mock_euid):
         """When no_root=True, root check is skipped regardless of euid."""
         pm = AptPackageManager()

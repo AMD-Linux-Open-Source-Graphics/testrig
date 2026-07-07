@@ -594,7 +594,8 @@ class TestPrepare:
 
         run.prepare()
 
-        mock_subproc.assert_called_once_with(["rocminfo"], check=True)
+        expected_env = os.environ.copy()
+        mock_subproc.assert_called_once_with(["rocminfo"], check=True, stderr=subprocess.STDOUT, env=expected_env)
 
     @patch("testrig.rig.subprocess.run")
     def test_skips_rocminfo_in_dry_run(self, mock_subproc, capsys):
@@ -606,3 +607,154 @@ class TestPrepare:
         mock_subproc.assert_not_called()
         captured = capsys.readouterr()
         assert "rocminfo" in captured.out
+
+
+# ==========================================================================
+# Group K: environment handling for subprocess calls
+# ==========================================================================
+
+
+class TestBuildRunEnv:
+    def test_inherits_current_environment(self):
+        run = make_rig()
+
+        with patch.dict(os.environ, {"SOME_VAR": "some_value"}, clear=False):
+            env = run._build_run_env()
+
+        assert env["SOME_VAR"] == "some_value"
+
+    def test_returns_a_copy_not_the_live_environment(self):
+        run = make_rig()
+
+        env = run._build_run_env()
+        env["TESTRIG_ONLY"] = "1"
+
+        assert "TESTRIG_ONLY" not in os.environ
+
+    def test_omits_rocr_visible_devices_when_unset(self):
+        run = make_rig()
+
+        env = run._build_run_env()
+
+        assert "ROCR_VISIBLE_DEVICES" not in env
+
+    def test_omits_rocr_visible_devices_when_empty_string(self):
+        run = make_rig()
+        run.settings = {"ROCR_VISIBLE_DEVICES": ""}
+
+        env = run._build_run_env()
+
+        assert "ROCR_VISIBLE_DEVICES" not in env
+
+    def test_sets_rocr_visible_devices_when_configured(self):
+        run = make_rig()
+        run.settings = {"ROCR_VISIBLE_DEVICES": "GPU-123"}
+
+        env = run._build_run_env()
+
+        assert env["ROCR_VISIBLE_DEVICES"] == "GPU-123"
+
+    def test_overrides_inherited_rocr_visible_devices(self):
+        run = make_rig()
+        run.settings = {"ROCR_VISIBLE_DEVICES": "GPU-from-settings"}
+
+        with patch.dict(os.environ, {"ROCR_VISIBLE_DEVICES": "GPU-from-shell"}, clear=False):
+            env = run._build_run_env()
+
+        assert env["ROCR_VISIBLE_DEVICES"] == "GPU-from-settings"
+
+
+class TestRunCommand:
+    @patch("testrig.rig.subprocess.run")
+    def test_passes_built_env_and_redirects_stderr(self, mock_subproc):
+        run = make_rig()
+        run.settings = {"ROCR_VISIBLE_DEVICES": "GPU-123"}
+
+        run._run_command(["some", "command"])
+
+        expected_env = os.environ.copy()
+        expected_env["ROCR_VISIBLE_DEVICES"] = "GPU-123"
+        mock_subproc.assert_called_once_with(
+            ["some", "command"],
+            check=False,
+            stderr=subprocess.STDOUT,
+            env=expected_env,
+        )
+
+    @patch("testrig.rig.subprocess.run")
+    def test_forwards_check_flag(self, mock_subproc):
+        run = make_rig()
+
+        run._run_command(["some", "command"], check=True)
+
+        expected_env = os.environ.copy()
+        mock_subproc.assert_called_once_with(
+            ["some", "command"],
+            check=True,
+            stderr=subprocess.STDOUT,
+            env=expected_env,
+        )
+
+
+class TestSubprocessEnvPropagation:
+    @patch("testrig.rig.subprocess.run")
+    def test_rocminfo_receives_rocr_visible_devices(self, mock_subproc):
+        mock_subproc.return_value = MagicMock(returncode=0)
+        run = make_rig(dry_run=False)
+        run.distro = make_mock_distro()
+        run.settings = {"ROCR_VISIBLE_DEVICES": "GPU-123"}
+
+        run.prepare()
+
+        expected_env = os.environ.copy()
+        expected_env["ROCR_VISIBLE_DEVICES"] = "GPU-123"
+        mock_subproc.assert_called_once_with(
+            ["rocminfo"], check=True, stderr=subprocess.STDOUT, env=expected_env
+        )
+
+    @patch("testrig.rig.subprocess.run")
+    def test_gdb_receives_rocr_visible_devices(self, mock_subproc, tmp_path):
+        mock_subproc.return_value = MagicMock(returncode=0)
+
+        distro = make_mock_distro("ubuntu")
+        distro.check_for_installed_packages.return_value = True
+
+        spec = {
+            "name": "test",
+            "ubuntu": {
+                "test_binary_path": "/bin",
+                "test_package_name": "pkg",
+                "test_debug_package_names": ["pkg-dbg"],
+            },
+        }
+        run = make_rig(spec=spec)
+        run.distro = distro
+        run.workdir = str(tmp_path)
+        run.settings = {"ROCR_VISIBLE_DEVICES": "GPU-123"}
+
+        run.gather_debug_info(["/bin/test_a"])
+
+        expected_env = os.environ.copy()
+        expected_env["ROCR_VISIBLE_DEVICES"] = "GPU-123"
+        gdb_calls = [c for c in mock_subproc.call_args_list if c[0][0][0] == "gdb"]
+        assert len(gdb_calls) == 1
+        assert gdb_calls[0].kwargs["env"] == expected_env
+        assert gdb_calls[0].kwargs["stderr"] == subprocess.STDOUT
+
+    @patch("testrig.rig.subprocess.run")
+    def test_execute_binary_receives_rocr_visible_devices(self, mock_subproc):
+        mock_subproc.return_value = MagicMock(returncode=0)
+        run = make_rig()
+        run.settings = {"ROCR_VISIBLE_DEVICES": "GPU-123"}
+
+        run._execute_binary("/fake/bin/test_a")
+
+        expected_env = os.environ.copy()
+        expected_env["ROCR_VISIBLE_DEVICES"] = "GPU-123"
+        mock_subproc.assert_called_once_with(
+            ["/fake/bin/test_a"],
+            check=False,
+            stderr=subprocess.STDOUT,
+            env=expected_env,
+        )
+

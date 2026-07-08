@@ -221,7 +221,9 @@ class TestExecuteBinary:
 
         assert result is True
         expected_env = os.environ.copy()
-        mock_subproc.assert_called_once_with(["/fake/bin/test_a"], check=False, stderr=subprocess.STDOUT, env=expected_env)
+        mock_subproc.assert_called_once_with(
+            ["/fake/bin/test_a"], check=False, stderr=subprocess.STDOUT, env=expected_env
+        )
 
     @patch("testrig.rig.subprocess.run")
     def test_fail_returns_false(self, mock_subproc):
@@ -448,9 +450,9 @@ class TestExecute:
     @patch("testrig.rig.subprocess.run")
     @patch("testrig.rig.tempfile.mkdtemp")
     @patch("testrig.rig.get_distro")
-    def test_force_debug_raises_unbound_local_error(self, mock_get_distro, mock_mkdtemp, mock_subproc, tmp_path):
-        """BUG: run_result is only assigned in the else branch but returned
-        unconditionally. When force_debug=True, UnboundLocalError is raised."""
+    def test_force_debug_returns_empty_results(self, mock_get_distro, mock_mkdtemp, mock_subproc, tmp_path):
+        """When force_debug=True, execute gathers debug info instead of running
+        tests and returns an empty results dict."""
         mock_mkdtemp.return_value = str(tmp_path)
         mock_distro = make_mock_distro("ubuntu")
         mock_distro.check_for_installed_packages.return_value = True
@@ -472,8 +474,61 @@ class TestExecute:
             mock_scandir.return_value = [
                 make_mock_direntry("test_a", is_file=True, path="/opt/bin/test_a"),
             ]
-            with pytest.raises(UnboundLocalError):
-                run.execute(force_debug=True)
+            result = run.execute(force_debug=True)
+
+        assert result == {"passed": [], "failed": []}
+
+    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake")
+    @patch("testrig.rig.get_distro")
+    def test_disable_debug_overrides_force_debug(self, mock_get_distro, mock_mkdtemp, mock_subproc):
+        """When disable_debug=True, force_debug is ignored and tests are run."""
+        mock_distro = make_mock_distro("ubuntu")
+        mock_distro.check_for_installed_packages.return_value = True
+        mock_distro.get_package_info.return_value = "1.0"
+        mock_get_distro.return_value = mock_distro
+
+        mock_subproc.return_value = MagicMock(returncode=0)
+
+        spec = {
+            "name": "test",
+            "ubuntu": {"test_binary_path": "/opt/bin", "test_package_name": "mypkg"},
+        }
+        run = make_rig(spec=spec)
+
+        with patch("testrig.rig.os.scandir") as mock_scandir:
+            mock_scandir.return_value = [
+                make_mock_direntry("test_a", is_file=True, path="/opt/bin/test_a"),
+            ]
+            result = run.execute(force_debug=True, disable_debug=True)
+
+        assert result == {"passed": ["/opt/bin/test_a"], "failed": []}
+
+    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake")
+    @patch("testrig.rig.get_distro")
+    def test_disable_debug_runs_tests(self, mock_get_distro, mock_mkdtemp, mock_subproc):
+        """When disable_debug=True and force_debug=False, tests run normally."""
+        mock_distro = make_mock_distro("ubuntu")
+        mock_distro.check_for_installed_packages.return_value = True
+        mock_distro.get_package_info.return_value = "1.0"
+        mock_get_distro.return_value = mock_distro
+
+        mock_subproc.return_value = MagicMock(returncode=0)
+
+        spec = {
+            "name": "test",
+            "ubuntu": {"test_binary_path": "/opt/bin", "test_package_name": "mypkg"},
+        }
+        run = make_rig(spec=spec)
+
+        with patch("testrig.rig.os.scandir") as mock_scandir:
+            mock_scandir.return_value = [
+                make_mock_direntry("test_a", is_file=True, path="/opt/bin/test_a"),
+            ]
+            result = run.execute(force_debug=False, disable_debug=True)
+
+        assert result == {"passed": ["/opt/bin/test_a"], "failed": []}
 
 
 # ==========================================================================
@@ -708,9 +763,7 @@ class TestSubprocessEnvPropagation:
 
         expected_env = os.environ.copy()
         expected_env["ROCR_VISIBLE_DEVICES"] = "GPU-123"
-        mock_subproc.assert_called_once_with(
-            ["rocminfo"], check=True, stderr=subprocess.STDOUT, env=expected_env
-        )
+        mock_subproc.assert_called_once_with(["rocminfo"], check=True, stderr=subprocess.STDOUT, env=expected_env)
 
     @patch("testrig.rig.subprocess.run")
     def test_gdb_receives_rocr_visible_devices(self, mock_subproc, tmp_path):
@@ -757,4 +810,3 @@ class TestSubprocessEnvPropagation:
             stderr=subprocess.STDOUT,
             env=expected_env,
         )
-

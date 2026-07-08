@@ -233,7 +233,7 @@ class Rig:
                 print("gdb failed for {} with return code {}".format(failed_binary, process.returncode), flush=True)
                 print("", flush=True)
 
-    def execute(self, force_debug=False):
+    def execute(self, force_debug=False, disable_debug=False):
         self.start_time = datetime.now()
         print("Running test for {}".format(self.name), flush=True)
 
@@ -259,9 +259,13 @@ class Rig:
         print("================================================================================", flush=True)
         print("", flush=True)
 
-        if force_debug:
+        if force_debug and disable_debug:
+            print("debug runs are disabled by global settings, ignoring --debug", flush=True)
+
+        if force_debug and not disable_debug:
             self._scan_binaries()
             self.gather_debug_info(self.test_binaries)
+            run_result = {"passed": [], "failed": []}
         else:
             run_result = self.run_tests()
 

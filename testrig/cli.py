@@ -55,10 +55,9 @@ def run_test(ctx, no_debug):
     pprint(rig.rig_spec)
 
     disable_debug = ctx.obj["settings"]["disable_debug"]
-    if disable_debug and ctx.obj["debug"]:
-        print("debug runs are disabled by global settings, ignoring --debug")
+    print("disable_debug: {}".format(disable_debug))
 
-    results = rig.execute(force_debug=ctx.obj["debug"] and not disable_debug)
+    results = rig.execute(force_debug=ctx.obj["debug"], disable_debug=disable_debug)
 
     if len(results["failed"]) > 0:
         if not no_debug and not disable_debug:

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 from datetime import datetime
+import logging
 import os
 import subprocess
 import tempfile
@@ -10,6 +11,8 @@ import tomllib
 
 
 from .util import get_distro
+
+logger = logging.getLogger(__name__)
 
 REQUIRED_FIELDS = ["name"]
 
@@ -45,7 +48,7 @@ class Rig:
         self.distro = get_distro(no_root=self.no_root)
 
         if self.distro.name not in self.rig_spec.keys():
-            print("no distro specified, assuming test binary is in $PATH", flush=True)
+            logger.info("no distro specified, assuming test binary is in $PATH")
             self.binary_path = os.path.abspath(".")
         else:
             self.binary_path = os.path.abspath(self.rig_spec[self.distro.name]["test_binary_path"])
@@ -64,16 +67,14 @@ class Rig:
         return subprocess.run(command, check=check, stderr=subprocess.STDOUT, env=self._build_run_env())
 
     def _gather_rocm_info(self):
-        print("--------------------------------------------------------------------------------", flush=True)
-        print("rocminfo", flush=True)
-        print("--------------------------------------------------------------------------------", flush=True)
-        print("", flush=True)
+        logger.info("--------------------------------------------------------------------------------")
+        logger.info("rocminfo")
+        logger.info("--------------------------------------------------------------------------------")
 
         if not self.dry_run:
             process = self._run_command(["rocminfo"], check=True)
             if process.returncode != 0:
                 raise Exception("rocminfo failed - returncode {}".format(process.returncode))
-            print("", flush=True)
 
     def prepare(self):
         # check to make sure that tests package is installed
@@ -85,17 +86,16 @@ class Rig:
     # check to make sure that the system is ready to run the test
     # this is mostly checking to make sure that required packages are installed
     def verify_packages(self):
-        print("--------------------------------------------------------------------------------", flush=True)
-        print("checking for installed packages", flush=True)
-        print("--------------------------------------------------------------------------------", flush=True)
-        print("", flush=True)
+        logger.info("--------------------------------------------------------------------------------")
+        logger.info("checking for installed packages")
+        logger.info("--------------------------------------------------------------------------------")
 
         # check to make sure that tests package is installed
         if self.distro is None:
             self._setup()
 
         if self.distro.name not in self.rig_spec.keys():
-            print("no distro information specified, not checking for any packages", flush=True)
+            logger.info("no distro information specified, not checking for any packages")
         else:
             required_package = self.rig_spec[self.distro.name]["test_package_name"]
 
@@ -104,33 +104,30 @@ class Rig:
                 [required_package], install_if_not_present=do_install_missing_packages
             ):
                 package_info = self.distro.get_package_info(required_package)
-                print('required test package "{}" is installed: {}'.format(required_package, package_info), flush=True)
-                print("", flush=True)
+                logger.info(
+                    'required test package "{}" is installed: {}'.format(required_package, package_info)
+                )
 
             else:
-                raise Exception('required test package "{}" is not installed.'.format(required_package), flush=True)
+                raise Exception('required test package "{}" is not installed.'.format(required_package))
 
     def _execute_binary(self, binary_path):
         run_command = [binary_path]
         if "extra_args" in self.rig_spec.keys():
             run_command.extend(self.rig_spec["extra_args"])
-        print("", flush=True)
 
-        print("", flush=True)
-        print("------------------------------------------------------------", flush=True)
-        print("binary: {}".format(os.path.basename(binary_path)), flush=True)
-        print("------------------------------------------------------------", flush=True)
-        print("running command: '{}'".format(" ".join(run_command)), flush=True)
-        print("", flush=True)
+        logger.info("------------------------------------------------------------")
+        logger.info("binary: {}".format(os.path.basename(binary_path)))
+        logger.info("------------------------------------------------------------")
+        logger.info("running command: '{}'".format(" ".join(run_command)))
 
         process = self._run_command(run_command)
-        print("", flush=True)
 
         if process.returncode == 0:
-            print("result: PASS", flush=True)
+            logger.info("result: PASS")
             return True
         else:
-            print("result: FAIL", flush=True)
+            logger.info("result: FAIL")
             return False
 
     def _scan_binaries(self):
@@ -158,21 +155,17 @@ class Rig:
             else:
                 failed_tests.append(test_binary)
 
-        print("================================================================================", flush=True)
-        print("RESULTS", flush=True)
-        print("================================================================================", flush=True)
-        print("", flush=True)
+        logger.info("================================================================================")
+        logger.info("RESULTS")
+        logger.info("================================================================================")
         num_tests_run = len(passed_tests) + len(failed_tests)
-        print("total tests run: {}".format(num_tests_run), flush=True)
-        print("passed tests ({}/{}):".format(len(passed_tests), num_tests_run), flush=True)
+        logger.info("total tests run: {}".format(num_tests_run))
+        logger.info("passed tests ({}/{}):".format(len(passed_tests), num_tests_run))
         for passed_test in passed_tests:
-            print("  {}".format(passed_test), flush=True)
-        print("", flush=True)
-        print("failed tests ({}/{}):".format(len(failed_tests), num_tests_run), flush=True)
+            logger.info("  {}".format(passed_test))
+        logger.info("failed tests ({}/{}):".format(len(failed_tests), num_tests_run))
         for failed_test in failed_tests:
-            print("  {}".format(failed_test), flush=True)
-        print("", flush=True)
-
+            logger.info("  {}".format(failed_test))
         return {"passed": passed_tests, "failed": failed_tests}
 
     def verify_debug_packages(self):
@@ -183,25 +176,23 @@ class Rig:
         # this code is going to have to get smarter (look for deps) or this will need to be a package list and it'll
         # be up to the user to specify all the debug packages
         if self.distro.name not in self.rig_spec.keys():
-            print("no distro information specified, not checking for any packages", flush=True)
+            logger.info("no distro information specified, not checking for any packages")
         else:
             required_packages = self.rig_spec[self.distro.name]["test_debug_package_names"]
 
             if self.distro.check_for_installed_packages(required_packages, install_if_not_present=True):
-                print('required debug package "{}" is installed.'.format(" ".join(required_packages)), flush=True)
+                logger.info('required debug package "{}" is installed.'.format(" ".join(required_packages)))
             else:
                 raise Exception(
-                    'required debug package "{}" was not installed.'.format(" ".join(required_packages)), flush=True
+                    'required debug package "{}" was not installed.'.format(" ".join(required_packages))
                 )
 
     def gather_debug_info(self, failed_binaries):
-        print("", flush=True)
-        print("================================================================================", flush=True)
-        print("gathering debug information for:", flush=True)
+        logger.info("================================================================================")
+        logger.info("gathering debug information for:")
         for failed_binary in failed_binaries:
-            print("  {}".format(failed_binary), flush=True)
-        print("================================================================================", flush=True)
-        print("", flush=True)
+            logger.info("  {}".format(failed_binary))
+        logger.info("================================================================================")
 
         self.verify_debug_packages()
 
@@ -220,47 +211,40 @@ class Rig:
 
         # run gdb
         for failed_binary in failed_binaries:
-            print("", flush=True)
-            print("------------------------------------------------------------", flush=True)
-            print("debug binary: {}".format(os.path.basename(failed_binary)), flush=True)
-            print("------------------------------------------------------------", flush=True)
+            logger.info("------------------------------------------------------------")
+            logger.info("debug binary: {}".format(os.path.basename(failed_binary)))
+            logger.info("------------------------------------------------------------")
             gdb_command = ["gdb", "--batch", "--command={}".format(gdb_batch_file_path), failed_binary]
-            print("gdb command: {}".format(" ".join(gdb_command)), flush=True)
-            print("", flush=True)
+            logger.info("gdb command: {}".format(" ".join(gdb_command)))
             process = self._run_command(gdb_command)
-            print("", flush=True)
             if process.returncode != 0:
-                print("gdb failed for {} with return code {}".format(failed_binary, process.returncode), flush=True)
-                print("", flush=True)
+                logger.warning(
+                    "gdb failed for {} with return code {}".format(failed_binary, process.returncode)
+                )
 
     def execute(self, force_debug=False, disable_debug=False):
         self.start_time = datetime.now()
-        print("Running test for {}".format(self.name), flush=True)
+        logger.info("Running test for {}".format(self.name))
 
-        print("================================================================================", flush=True)
-        print("running check", flush=True)
-        print("================================================================================", flush=True)
-        print("", flush=True)
+        logger.info("================================================================================")
+        logger.info("running check")
+        logger.info("================================================================================")
         self._setup()
-        print("identified distro as {}".format(self.distro.name), flush=True)
+        logger.info("identified distro as {}".format(self.distro.name))
         self.verify_packages()
 
-        print("", flush=True)
-        print("================================================================================", flush=True)
-        print("running prep", flush=True)
-        print("================================================================================", flush=True)
-        print("", flush=True)
+        logger.info("================================================================================")
+        logger.info("running prep")
+        logger.info("================================================================================")
 
         self.prepare()
 
-        print("", flush=True)
-        print("================================================================================", flush=True)
-        print("running test", flush=True)
-        print("================================================================================", flush=True)
-        print("", flush=True)
+        logger.info("================================================================================")
+        logger.info("running test")
+        logger.info("================================================================================")
 
         if force_debug and disable_debug:
-            print("debug runs are disabled by global settings, ignoring --debug", flush=True)
+            logger.info("debug runs are disabled by global settings, ignoring --debug")
 
         if force_debug and not disable_debug:
             self._scan_binaries()
@@ -269,15 +253,13 @@ class Rig:
         else:
             run_result = self.run_tests()
 
-        print("", flush=True)
-        print("================================================================================", flush=True)
-        print("run complete", flush=True)
-        print("================================================================================", flush=True)
-        print("", flush=True)
+        logger.info("================================================================================")
+        logger.info("run complete")
+        logger.info("================================================================================")
 
         runtime = datetime.now() - self.start_time
-        print("Rig run started at: {}".format(self.start_time.strftime("%Y-%m-%d %H:%M:%S")), flush=True)
-        print("Rig run completed at: {}".format((self.start_time + runtime).strftime("%Y-%m-%d %H:%M:%S")), flush=True)
-        print("Total runtime: {}".format(runtime), flush=True)
+        logger.info("Rig run started at: {}".format(self.start_time.strftime("%Y-%m-%d %H:%M:%S")))
+        logger.info("Rig run completed at: {}".format((self.start_time + runtime).strftime("%Y-%m-%d %H:%M:%S")))
+        logger.info("Total runtime: {}".format(runtime))
 
         return run_result

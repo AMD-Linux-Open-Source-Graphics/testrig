@@ -11,6 +11,8 @@ asserted as-is and flagged with comments.
 
 from unittest.mock import MagicMock, mock_open, patch
 
+import logging
+
 import pytest
 
 from testrig.distro import BaseDistro
@@ -364,19 +366,19 @@ class TestAptIsInstalled:
 
 class TestAptInstallPackages:
     @patch("testrig.packagemanager.apt.subprocess.run")
-    def test_successful_install(self, mock_subproc, capsys):
+    def test_successful_install(self, mock_subproc, caplog):
         mock_subproc.return_value = MagicMock(stdout=b"Installing packages...", returncode=0)
         pm = AptPackageManager()
 
-        pm.install_packages(["pkg-a", "pkg-b"])
+        with caplog.at_level(logging.INFO):
+            pm.install_packages(["pkg-a", "pkg-b"])
 
         mock_subproc.assert_called_once_with(
             ["apt-get", "install", "-y", "pkg-a", "pkg-b"],
             check=False,
             capture_output=True,
         )
-        captured = capsys.readouterr()
-        assert "packages installed 'pkg-a pkg-b" in captured.out
+        assert "packages installed 'pkg-a pkg-b" in caplog.text
 
     @patch("testrig.packagemanager.apt.subprocess.run")
     def test_install_command_joins_packages_as_single_arg(self, mock_subproc):

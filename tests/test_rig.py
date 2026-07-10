@@ -9,6 +9,7 @@ asserted as-is and flagged with comments.
 """
 
 import os
+import logging
 import subprocess
 from unittest.mock import MagicMock, patch
 
@@ -114,17 +115,17 @@ class TestSetup:
 
     @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake-workdir")
     @patch("testrig.rig.get_distro")
-    def test_defaults_binary_path_when_no_distro_spec(self, mock_get_distro, mock_mkdtemp, capsys):
+    def test_defaults_binary_path_when_no_distro_spec(self, mock_get_distro, mock_mkdtemp, caplog):
         mock_distro = make_mock_distro("ubuntu")
         mock_get_distro.return_value = mock_distro
 
         spec = {"name": "test2"}
         run = make_rig(spec=spec)
-        run._setup()
+        with caplog.at_level(logging.INFO):
+            run._setup()
 
         assert run.binary_path == os.path.abspath(".")
-        captured = capsys.readouterr()
-        assert "no distro specified" in captured.out
+        assert "no distro specified" in caplog.text
 
     @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake-workdir")
     @patch("testrig.rig.get_distro")
@@ -144,7 +145,7 @@ class TestSetup:
 
 
 class TestVerifyPackages:
-    def test_package_installed_not_dry_run(self, capsys):
+    def test_package_installed_not_dry_run(self, caplog):
         distro = make_mock_distro("ubuntu")
         distro.check_for_installed_packages.return_value = True
         distro.get_package_info.return_value = "1.2.3-1"
@@ -156,13 +157,13 @@ class TestVerifyPackages:
         run = make_rig(spec=spec)
         run.distro = distro
 
-        run.verify_packages()
+        with caplog.at_level(logging.INFO):
+            run.verify_packages()
 
         # dry_run=False → do_install_missing_packages = not False = True
         distro.check_for_installed_packages.assert_called_once_with(["mypkg"], install_if_not_present=True)
         distro.get_package_info.assert_called_once_with("mypkg")
-        captured = capsys.readouterr()
-        assert 'required test package "mypkg" is installed: 1.2.3-1' in captured.out
+        assert 'required test package "mypkg" is installed: 1.2.3-1' in caplog.text
 
     def test_package_installed_dry_run(self):
         distro = make_mock_distro("ubuntu")
@@ -181,15 +182,15 @@ class TestVerifyPackages:
         # dry_run=True → do_install_missing_packages = not True = False
         distro.check_for_installed_packages.assert_called_once_with(["mypkg"], install_if_not_present=False)
 
-    def test_no_distro_in_spec(self, capsys):
+    def test_no_distro_in_spec(self, caplog):
         distro = make_mock_distro("ubuntu")
         run = make_rig(spec={"name": "test"})
         run.distro = distro
 
-        run.verify_packages()
+        with caplog.at_level(logging.INFO):
+            run.verify_packages()
 
-        captured = capsys.readouterr()
-        assert "no distro information specified" in captured.out
+        assert "no distro information specified" in caplog.text
 
     def test_initializes_distro_if_none(self):
         run = make_rig(spec={"name": "test"})
@@ -383,7 +384,7 @@ class TestRunTests:
         assert result == {"passed": ["/bin/test_a"], "failed": ["/bin/test_b"]}
 
     @patch("testrig.rig.subprocess.run")
-    def test_total_tests_print_bug(self, mock_subproc, capsys):
+    def test_total_tests_print_bug(self, mock_subproc, caplog):
         """BUG: 'total tests run: '.format(num_tests_run) has no {} placeholder.
         The count is silently lost."""
         mock_subproc.return_value = MagicMock(returncode=0)
@@ -393,10 +394,10 @@ class TestRunTests:
         run.binary_path = "/bin"
         run.test_binaries = ["/bin/test_a"]
 
-        run.run_tests()
+        with caplog.at_level(logging.INFO):
+            run.run_tests()
 
-        captured = capsys.readouterr()
-        assert "total tests run: 1" in captured.out
+        assert "total tests run: 1" in caplog.text
 
     def test_discovers_binaries_if_none(self):
         run = make_rig()
@@ -537,17 +538,17 @@ class TestExecute:
 
 
 class TestVerifyDebugPackages:
-    def test_no_distro_in_spec(self, capsys):
+    def test_no_distro_in_spec(self, caplog):
         distro = make_mock_distro("ubuntu")
         run = make_rig(spec={"name": "test"})
         run.distro = distro
 
-        run.verify_debug_packages()
+        with caplog.at_level(logging.INFO):
+            run.verify_debug_packages()
 
-        captured = capsys.readouterr()
-        assert "no distro information specified" in captured.out
+        assert "no distro information specified" in caplog.text
 
-    def test_debug_packages_checked(self, capsys):
+    def test_debug_packages_checked(self, caplog):
         distro = make_mock_distro("ubuntu")
         distro.check_for_installed_packages.return_value = True
 
@@ -562,11 +563,11 @@ class TestVerifyDebugPackages:
         run = make_rig(spec=spec)
         run.distro = distro
 
-        run.verify_debug_packages()
+        with caplog.at_level(logging.INFO):
+            run.verify_debug_packages()
 
         distro.check_for_installed_packages.assert_called_once_with(["pkg-dbg", "lib-dbg"], install_if_not_present=True)
-        captured = capsys.readouterr()
-        assert 'required debug package "pkg-dbg lib-dbg" is installed.' in captured.out
+        assert 'required debug package "pkg-dbg lib-dbg" is installed.' in caplog.text
 
 
 # ==========================================================================
@@ -609,7 +610,7 @@ class TestGatherDebugInfo:
         assert len(gdb_calls) == 2
 
     @patch("testrig.rig.subprocess.run")
-    def test_gdb_failure_prints_message(self, mock_subproc, tmp_path, capsys):
+    def test_gdb_failure_prints_message(self, mock_subproc, tmp_path, caplog):
         mock_subproc.return_value = MagicMock(returncode=1)
 
         distro = make_mock_distro("ubuntu")
@@ -629,8 +630,7 @@ class TestGatherDebugInfo:
 
         run.gather_debug_info(["/bin/test_a"])
 
-        captured = capsys.readouterr()
-        assert "gdb failed for /bin/test_a with return code 1" in captured.out
+        assert "gdb failed for /bin/test_a with return code 1" in caplog.text
 
 
 # ==========================================================================
@@ -653,15 +653,15 @@ class TestPrepare:
         mock_subproc.assert_called_once_with(["rocminfo"], check=True, stderr=subprocess.STDOUT, env=expected_env)
 
     @patch("testrig.rig.subprocess.run")
-    def test_skips_rocminfo_in_dry_run(self, mock_subproc, capsys):
+    def test_skips_rocminfo_in_dry_run(self, mock_subproc, caplog):
         run = make_rig(dry_run=True)
         run.distro = make_mock_distro()
 
-        run.prepare()
+        with caplog.at_level(logging.INFO):
+            run.prepare()
 
         mock_subproc.assert_not_called()
-        captured = capsys.readouterr()
-        assert "rocminfo" in captured.out
+        assert "rocminfo" in caplog.text
 
 
 # ==========================================================================

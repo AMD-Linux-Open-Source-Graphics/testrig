@@ -2,14 +2,17 @@
 #
 # SPDX-License-Identifier: MIT
 
+import logging
 import os
-from pprint import pprint
+from pprint import pformat
 import sys
 
 import click
 
 from .rig import parse_rig
 from .settings import load_settings
+
+logger = logging.getLogger(__name__)
 
 
 @click.group()
@@ -24,8 +27,14 @@ from .settings import load_settings
 @click.option("-d", "--debug", is_flag=True, default=False, help="Enable debug mode")
 @click.option("--no-root", is_flag=True, default=False, help="Do not run as root")
 @click.option("--dry-run", is_flag=True, default=False, help="Perform a dry run without executing tests")
+@click.option("-v", "--verbose", is_flag=True, default=False, help="Enable verbose (debug) logging")
 @click.pass_context
-def cli(ctx, run_directory, filename, debug, no_root, dry_run):
+def cli(ctx, run_directory, filename, debug, no_root, dry_run, verbose):
+    logging.basicConfig(
+        format="%(levelname)s: %(message)s",
+        level=logging.DEBUG if verbose else logging.INFO,
+    )
+
     ctx.ensure_object(dict)
     ctx.obj["run_directory"] = run_directory
     ctx.obj["filename"] = filename
@@ -48,14 +57,14 @@ def cli(ctx, run_directory, filename, debug, no_root, dry_run):
 @click.pass_context
 def run_test(ctx, no_debug):
 
-    print("Running test: {}".format(ctx.obj["filename"]))
+    logger.info("Running test: {}".format(ctx.obj["filename"]))
     rig = parse_rig(ctx.obj["input_path"], dry_run=ctx.obj["dry_run"], settings=ctx.obj["settings"])
     rig.no_root = ctx.obj["no_root"]
 
-    pprint(rig.rig_spec)
+    logger.debug(pformat(rig.rig_spec))
 
     disable_debug = ctx.obj["settings"]["disable_debug"]
-    print("disable_debug: {}".format(disable_debug))
+    logger.debug("disable_debug: {}".format(disable_debug))
 
     results = rig.execute(force_debug=ctx.obj["debug"], disable_debug=disable_debug)
 
@@ -63,7 +72,7 @@ def run_test(ctx, no_debug):
         if not no_debug and not disable_debug:
             rig.gather_debug_info(results["failed"])
 
-        print("FAILED TESTS DETECTED: exiting with return code 1")
+        logger.error("FAILED TESTS DETECTED: exiting with return code 1")
         sys.exit(1)
 
 
@@ -72,7 +81,7 @@ def run_test(ctx, no_debug):
 @click.option("--ignore-test-packages", is_flag=True, default=False, help="Ignore missing test packages")
 @click.pass_context
 def check_install(ctx, ignore_debug_packages, ignore_test_packages):
-    print("running install check for {}".format(ctx.obj["input_path"]))
+    logger.info("running install check for {}".format(ctx.obj["input_path"]))
     rig = parse_rig(ctx.obj["input_path"], settings=ctx.obj["settings"])
     rig.no_root = ctx.obj["no_root"]
 

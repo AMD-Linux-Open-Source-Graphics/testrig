@@ -2,9 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+import logging
 import subprocess
 
 from testrig.packagemanager import PackageManager
+
+logger = logging.getLogger(__name__)
 
 
 class AptPackageManager(PackageManager):
@@ -23,10 +26,10 @@ class AptPackageManager(PackageManager):
         try:
             self._run_command(command)
         except subprocess.CalledProcessError as e:
-            print("installation of packages ({}) failed".format(" ".join(package_names)))
+            logger.error("installation of packages ({}) failed".format(" ".join(package_names)))
             raise e
 
-        print("packages installed '{}".format(" ".join(package_names)))
+        logger.info("packages installed '{}".format(" ".join(package_names)))
 
     def get_package_info(self, package_name):
         package_version = self.is_installed(package_name)

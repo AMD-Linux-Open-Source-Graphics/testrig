@@ -60,6 +60,7 @@ class Rig:
         run_env = os.environ.copy()
         rocr_visible_devices = self.settings.get("ROCR_VISIBLE_DEVICES", "")
         if rocr_visible_devices:
+            logger.debug("setting ROCR_VISIBLE_DEVICES to %s", rocr_visible_devices)
             run_env["ROCR_VISIBLE_DEVICES"] = rocr_visible_devices
         return run_env
 

@@ -105,9 +105,7 @@ class Rig:
                 [required_package], install_if_not_present=do_install_missing_packages
             ):
                 package_info = self.distro.get_package_info(required_package)
-                logger.info(
-                    'required test package "{}" is installed: {}'.format(required_package, package_info)
-                )
+                logger.info('required test package "{}" is installed: {}'.format(required_package, package_info))
 
             else:
                 raise Exception('required test package "{}" is not installed.'.format(required_package))
@@ -189,9 +187,7 @@ class Rig:
             if self.distro.check_for_installed_packages(required_packages, install_if_not_present=True):
                 logger.info('required debug package "{}" is installed.'.format(" ".join(required_packages)))
             else:
-                raise Exception(
-                    'required debug package "{}" was not installed.'.format(" ".join(required_packages))
-                )
+                raise Exception('required debug package "{}" was not installed.'.format(" ".join(required_packages)))
 
     def gather_debug_info(self, failed_binaries):
         logger.info("================================================================================")
@@ -224,9 +220,7 @@ class Rig:
             logger.info("gdb command: {}".format(" ".join(gdb_command)))
             process = self._run_command(gdb_command)
             if process.returncode != 0:
-                logger.warning(
-                    "gdb failed for {} with return code {}".format(failed_binary, process.returncode)
-                )
+                logger.warning("gdb failed for {} with return code {}".format(failed_binary, process.returncode))
 
     def execute(self, force_debug=False, disable_debug=False):
         self.start_time = datetime.now()

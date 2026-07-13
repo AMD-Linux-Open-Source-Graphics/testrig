@@ -14,6 +14,38 @@ across multiple distros.
 
 Testrig uses `toml <https://toml.io/en/>`_ to describe tests.
 
+Input Format
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A rig file has a top-level ``name`` field and one section per supported distro
+(for example ``[ubuntu]`` or ``[fedora]``). Each distro section supports the
+following fields:
+
+test_binary_path
+    Directory containing the test entry points.
+
+test_binaries
+    Allowlist of entry point names to run. Each name is combined with
+    ``test_binary_path`` to build an absolute path to the binary. Only the
+    binaries listed here are executed.
+
+test_package_name
+    Package that must be installed in order to run the tests.
+
+test_debug_package_names
+    Packages providing debug symbols, used when gathering debug information on
+    failed tests.
+
+Example::
+
+    name = "my-rig"
+
+    [ubuntu]
+    test_binary_path = "/opt/rocm/bin"
+    test_binaries = ["test_foo", "test_bar"]
+    test_package_name = "rocm-tests"
+    test_debug_package_names = ["rocm-tests-dbgsym"]
+
 Examples
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

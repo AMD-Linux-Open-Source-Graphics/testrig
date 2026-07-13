@@ -131,21 +131,26 @@ class Rig:
             logger.info("result: FAIL")
             return False
 
-    def _scan_binaries(self):
-        self.test_binaries = []
+    def _resolve_test_binaries(self):
+        if self.distro.name not in self.rig_spec.keys():
+            raise Exception(
+                "no distro section for {} in rig spec, cannot resolve test binaries".format(self.distro.name)
+            )
 
-        for testbinname in os.scandir(self.binary_path):
-            # this isn't perfect but we need to avoid trying to run things like yaml files
-            # for now, ignoring anything with a file extension seems like it could work even if it is a dirty hack
-            if testbinname.is_file() and testbinname.name != "run-tests" and len(testbinname.name.split(".")) == 1:
-                self.test_binaries.append(testbinname.path)
+        distro_spec = self.rig_spec[self.distro.name]
+        if "test_binaries" not in distro_spec:
+            raise Exception('required field "test_binaries" is not specified for distro {}'.format(self.distro.name))
+
+        self.test_binaries = [
+            os.path.join(self.binary_path, binary_name) for binary_name in distro_spec["test_binaries"]
+        ]
 
     def run_tests(self):
         if self.distro is None:
             self._setup()
 
         if self.test_binaries is None:
-            self._scan_binaries()
+            self._resolve_test_binaries()
 
         failed_tests = []
         passed_tests = []
@@ -248,7 +253,7 @@ class Rig:
             logger.info("debug runs are disabled by global settings, ignoring --debug")
 
         if force_debug and not disable_debug:
-            self._scan_binaries()
+            self._resolve_test_binaries()
             self.gather_debug_info(self.test_binaries)
             run_result = {"passed": [], "failed": []}
         else:

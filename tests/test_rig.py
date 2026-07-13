@@ -35,14 +35,6 @@ def make_mock_distro(name="ubuntu"):
     return distro
 
 
-def make_mock_direntry(name, is_file=True, path=None):
-    entry = MagicMock()
-    entry.name = name
-    entry.is_file.return_value = is_file
-    entry.path = path or "/fake/bin/{}".format(name)
-    return entry
-
-
 # ==========================================================================
 # Group A: parse_rig()
 # ==========================================================================
@@ -266,73 +258,60 @@ class TestExecuteBinary:
 
 
 # ==========================================================================
-# Group E: _scan_binaries()
+# Group E: _resolve_test_binaries()
 # ==========================================================================
 
 
-class TestScanBinaries:
-    @patch("testrig.rig.os.scandir")
-    def test_includes_extensionless_files(self, mock_scandir):
-        mock_scandir.return_value = [
-            make_mock_direntry("test_foo", is_file=True, path="/bin/test_foo"),
-            make_mock_direntry("test_bar", is_file=True, path="/bin/test_bar"),
-        ]
-        run = make_rig()
-        run.binary_path = "/bin"
+class TestResolveTestBinaries:
+    def test_joins_binary_names_to_binary_path(self):
+        spec = {
+            "name": "test",
+            "ubuntu": {
+                "test_binary_path": "/opt/bin",
+                "test_binaries": ["test_foo", "test_bar"],
+            },
+        }
+        run = make_rig(spec=spec)
+        run.distro = make_mock_distro("ubuntu")
+        run.binary_path = "/opt/bin"
 
-        run._scan_binaries()
+        run._resolve_test_binaries()
 
-        assert run.test_binaries == ["/bin/test_foo", "/bin/test_bar"]
+        assert run.test_binaries == ["/opt/bin/test_foo", "/opt/bin/test_bar"]
 
-    @patch("testrig.rig.os.scandir")
-    def test_excludes_files_with_extensions(self, mock_scandir):
-        mock_scandir.return_value = [
-            make_mock_direntry("test_foo", is_file=True, path="/bin/test_foo"),
-            make_mock_direntry("spec.yaml", is_file=True, path="/bin/spec.yaml"),
-            make_mock_direntry("readme.txt", is_file=True, path="/bin/readme.txt"),
-        ]
-        run = make_rig()
-        run.binary_path = "/bin"
+    def test_empty_allowlist_produces_empty_list(self):
+        spec = {
+            "name": "test",
+            "ubuntu": {"test_binary_path": "/opt/bin", "test_binaries": []},
+        }
+        run = make_rig(spec=spec)
+        run.distro = make_mock_distro("ubuntu")
+        run.binary_path = "/opt/bin"
 
-        run._scan_binaries()
-
-        assert run.test_binaries == ["/bin/test_foo"]
-
-    @patch("testrig.rig.os.scandir")
-    def test_excludes_run_tests(self, mock_scandir):
-        mock_scandir.return_value = [
-            make_mock_direntry("test_foo", is_file=True, path="/bin/test_foo"),
-            make_mock_direntry("run-tests", is_file=True, path="/bin/run-tests"),
-        ]
-        run = make_rig()
-        run.binary_path = "/bin"
-
-        run._scan_binaries()
-
-        assert run.test_binaries == ["/bin/test_foo"]
-
-    @patch("testrig.rig.os.scandir")
-    def test_excludes_directories(self, mock_scandir):
-        mock_scandir.return_value = [
-            make_mock_direntry("test_foo", is_file=True, path="/bin/test_foo"),
-            make_mock_direntry("subdir", is_file=False, path="/bin/subdir"),
-        ]
-        run = make_rig()
-        run.binary_path = "/bin"
-
-        run._scan_binaries()
-
-        assert run.test_binaries == ["/bin/test_foo"]
-
-    @patch("testrig.rig.os.scandir")
-    def test_empty_directory(self, mock_scandir):
-        mock_scandir.return_value = []
-        run = make_rig()
-        run.binary_path = "/bin"
-
-        run._scan_binaries()
+        run._resolve_test_binaries()
 
         assert run.test_binaries == []
+
+    def test_missing_test_binaries_key_raises(self):
+        spec = {
+            "name": "test",
+            "ubuntu": {"test_binary_path": "/opt/bin"},
+        }
+        run = make_rig(spec=spec)
+        run.distro = make_mock_distro("ubuntu")
+        run.binary_path = "/opt/bin"
+
+        with pytest.raises(Exception, match='"test_binaries" is not specified'):
+            run._resolve_test_binaries()
+
+    def test_missing_distro_section_raises(self):
+        spec = {"name": "test"}
+        run = make_rig(spec=spec)
+        run.distro = make_mock_distro("ubuntu")
+        run.binary_path = os.path.abspath(".")
+
+        with pytest.raises(Exception, match="no distro section for ubuntu"):
+            run._resolve_test_binaries()
 
 
 # ==========================================================================
@@ -399,21 +378,21 @@ class TestRunTests:
 
         assert "total tests run: 1" in caplog.text
 
-    def test_discovers_binaries_if_none(self):
+    def test_resolves_binaries_if_none(self):
         run = make_rig()
         run.distro = make_mock_distro()
         run.binary_path = "/bin"
         run.test_binaries = None
 
-        with patch.object(run, "_scan_binaries") as mock_discover:
+        with patch.object(run, "_resolve_test_binaries") as mock_resolve:
 
             def set_binaries():
                 run.test_binaries = []
 
-            mock_discover.side_effect = set_binaries
+            mock_resolve.side_effect = set_binaries
 
             result = run.run_tests()
-            mock_discover.assert_called_once()
+            mock_resolve.assert_called_once()
             assert result == {"passed": [], "failed": []}
 
 
@@ -436,15 +415,15 @@ class TestExecute:
 
         spec = {
             "name": "test",
-            "ubuntu": {"test_binary_path": "/opt/bin", "test_package_name": "mypkg"},
+            "ubuntu": {
+                "test_binary_path": "/opt/bin",
+                "test_package_name": "mypkg",
+                "test_binaries": ["test_a"],
+            },
         }
         run = make_rig(spec=spec)
 
-        with patch("testrig.rig.os.scandir") as mock_scandir:
-            mock_scandir.return_value = [
-                make_mock_direntry("test_a", is_file=True, path="/opt/bin/test_a"),
-            ]
-            result = run.execute(force_debug=False)
+        result = run.execute(force_debug=False)
 
         assert result == {"passed": ["/opt/bin/test_a"], "failed": []}
 
@@ -467,15 +446,12 @@ class TestExecute:
                 "test_binary_path": "/opt/bin",
                 "test_package_name": "mypkg",
                 "test_debug_package_names": ["mypkg-dbg"],
+                "test_binaries": ["test_a"],
             },
         }
         run = make_rig(spec=spec)
 
-        with patch("testrig.rig.os.scandir") as mock_scandir:
-            mock_scandir.return_value = [
-                make_mock_direntry("test_a", is_file=True, path="/opt/bin/test_a"),
-            ]
-            result = run.execute(force_debug=True)
+        result = run.execute(force_debug=True)
 
         assert result == {"passed": [], "failed": []}
 
@@ -493,15 +469,15 @@ class TestExecute:
 
         spec = {
             "name": "test",
-            "ubuntu": {"test_binary_path": "/opt/bin", "test_package_name": "mypkg"},
+            "ubuntu": {
+                "test_binary_path": "/opt/bin",
+                "test_package_name": "mypkg",
+                "test_binaries": ["test_a"],
+            },
         }
         run = make_rig(spec=spec)
 
-        with patch("testrig.rig.os.scandir") as mock_scandir:
-            mock_scandir.return_value = [
-                make_mock_direntry("test_a", is_file=True, path="/opt/bin/test_a"),
-            ]
-            result = run.execute(force_debug=True, disable_debug=True)
+        result = run.execute(force_debug=True, disable_debug=True)
 
         assert result == {"passed": ["/opt/bin/test_a"], "failed": []}
 
@@ -519,15 +495,15 @@ class TestExecute:
 
         spec = {
             "name": "test",
-            "ubuntu": {"test_binary_path": "/opt/bin", "test_package_name": "mypkg"},
+            "ubuntu": {
+                "test_binary_path": "/opt/bin",
+                "test_package_name": "mypkg",
+                "test_binaries": ["test_a"],
+            },
         }
         run = make_rig(spec=spec)
 
-        with patch("testrig.rig.os.scandir") as mock_scandir:
-            mock_scandir.return_value = [
-                make_mock_direntry("test_a", is_file=True, path="/opt/bin/test_a"),
-            ]
-            result = run.execute(force_debug=False, disable_debug=True)
+        result = run.execute(force_debug=False, disable_debug=True)
 
         assert result == {"passed": ["/opt/bin/test_a"], "failed": []}
 

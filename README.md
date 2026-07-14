@@ -51,6 +51,7 @@ Each rig has a top-level `name` and one section per supported distro (for exampl
   * `test_binaries` - an allowlist of entry point names to run. Each name is combined with `test_binary_path` to build an absolute path to the binary. Only the binaries listed here are executed.
   * `test_package_name` - the package that must be installed to run the tests
   * `test_debug_package_names` - packages providing debug symbols, used when gathering debug information on failures
+  * `extra_env_var` - an optional table of environment variables to set when running the test binaries. Keys are the environment variable names and values are what they should be set to. If omitted or empty, no additional environment variables are set.
 
 Example:
 
@@ -62,6 +63,8 @@ test_binary_path = "/opt/rocm/bin"
 test_binaries = ["test_foo", "test_bar"]
 test_package_name = "rocm-tests"
 test_debug_package_names = ["rocm-tests-dbgsym"]
+
+extra_env_var = {HSA_ENABLE_SDMA = "0", LD_LIBRARY_PATH = "/opt/rocm/lib"}
 ```
 
 With the above, testrig runs `/opt/rocm/bin/test_foo` and `/opt/rocm/bin/test_bar`.

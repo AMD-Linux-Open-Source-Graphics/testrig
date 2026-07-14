@@ -36,6 +36,12 @@ test_debug_package_names
     Packages providing debug symbols, used when gathering debug information on
     failed tests.
 
+extra_env_var
+    Optional table of environment variables to set when running the test
+    binaries. Keys are the environment variable names and values are what they
+    should be set to. If omitted or empty, no additional environment variables
+    are set.
+
 Example::
 
     name = "my-rig"
@@ -45,6 +51,7 @@ Example::
     test_binaries = ["test_foo", "test_bar"]
     test_package_name = "rocm-tests"
     test_debug_package_names = ["rocm-tests-dbgsym"]
+    extra_env_var = {HSA_ENABLE_SDMA = "0", LD_LIBRARY_PATH = "/opt/rocm/lib"}
 
 Examples
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

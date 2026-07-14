@@ -62,6 +62,13 @@ class Rig:
         if rocr_visible_devices:
             logger.debug("setting ROCR_VISIBLE_DEVICES to %s", rocr_visible_devices)
             run_env["ROCR_VISIBLE_DEVICES"] = rocr_visible_devices
+
+        if self.distro is not None and self.distro.name in self.rig_spec.keys():
+            extra_env_var = self.rig_spec[self.distro.name].get("extra_env_var", {})
+            for env_var_name, env_var_value in extra_env_var.items():
+                logger.debug("setting %s to %s", env_var_name, env_var_value)
+                run_env[env_var_name] = str(env_var_value)
+
         return run_env
 
     def _run_command(self, command, check=False):

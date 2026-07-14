@@ -694,6 +694,87 @@ class TestBuildRunEnv:
 
         assert env["ROCR_VISIBLE_DEVICES"] == "GPU-from-settings"
 
+    def test_sets_extra_env_var_from_distro_spec(self):
+        spec = {
+            "name": "test",
+            "ubuntu": {"extra_env_var": {"MY_VAR": "my_value", "OTHER_VAR": "other_value"}},
+        }
+        run = make_rig(spec=spec)
+        run.distro = make_mock_distro("ubuntu")
+
+        env = run._build_run_env()
+
+        assert env["MY_VAR"] == "my_value"
+        assert env["OTHER_VAR"] == "other_value"
+
+    def test_omits_extra_env_var_when_not_specified(self):
+        spec = {"name": "test", "ubuntu": {"test_binary_path": "/bin"}}
+        run = make_rig(spec=spec)
+        run.distro = make_mock_distro("ubuntu")
+
+        env = run._build_run_env()
+
+        assert "MY_VAR" not in env
+
+    def test_omits_extra_env_var_when_empty_table(self):
+        spec = {"name": "test", "ubuntu": {"extra_env_var": {}}}
+        run = make_rig(spec=spec)
+        run.distro = make_mock_distro("ubuntu")
+
+        env = run._build_run_env()
+
+        assert "MY_VAR" not in env
+
+    def test_omits_extra_env_var_when_distro_is_none(self):
+        spec = {
+            "name": "test",
+            "ubuntu": {"extra_env_var": {"MY_VAR": "my_value"}},
+        }
+        run = make_rig(spec=spec)
+        run.distro = None
+
+        env = run._build_run_env()
+
+        assert "MY_VAR" not in env
+
+    def test_omits_extra_env_var_when_distro_not_in_spec(self):
+        spec = {
+            "name": "test",
+            "ubuntu": {"extra_env_var": {"MY_VAR": "my_value"}},
+        }
+        run = make_rig(spec=spec)
+        run.distro = make_mock_distro("fedora")
+
+        env = run._build_run_env()
+
+        assert "MY_VAR" not in env
+
+    def test_coerces_non_string_extra_env_var_values(self):
+        spec = {
+            "name": "test",
+            "ubuntu": {"extra_env_var": {"NUM_VAR": 42, "BOOL_VAR": True}},
+        }
+        run = make_rig(spec=spec)
+        run.distro = make_mock_distro("ubuntu")
+
+        env = run._build_run_env()
+
+        assert env["NUM_VAR"] == "42"
+        assert env["BOOL_VAR"] == "True"
+
+    def test_extra_env_var_overrides_inherited_environment(self):
+        spec = {
+            "name": "test",
+            "ubuntu": {"extra_env_var": {"MY_VAR": "from-spec"}},
+        }
+        run = make_rig(spec=spec)
+        run.distro = make_mock_distro("ubuntu")
+
+        with patch.dict(os.environ, {"MY_VAR": "from-shell"}, clear=False):
+            env = run._build_run_env()
+
+        assert env["MY_VAR"] == "from-spec"
+
 
 class TestRunCommand:
     @patch("testrig.rig.subprocess.run")

@@ -53,6 +53,26 @@ Example::
     test_debug_package_names = ["rocm-tests-dbgsym"]
     extra_env_var = {HSA_ENABLE_SDMA = "0", LD_LIBRARY_PATH = "/opt/rocm/lib"}
 
+Global Settings
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Testrig reads optional global settings from ``/etc/testrig/settings.toml`` and
+``~/.config/testrig/settings.toml``. Values in the user file override values in
+the system file. The following settings are supported:
+
+disable_debug
+    Disable gathering of debug information (gdb runs) on failed tests. Defaults
+    to ``false``.
+
+ROCR_VISIBLE_DEVICES
+    GPU UUID (or list accepted by ROCr) to expose during test binary execution.
+    Defaults to empty, in which case testrig takes no additional action.
+
+gdb_pyfile_dir
+    Directory containing the ``gdb_traceback_on_stop.py`` helper that testrig
+    sources when gathering debug information on failed tests. Defaults to
+    ``/usr/share/testrig``.
+
 Examples
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

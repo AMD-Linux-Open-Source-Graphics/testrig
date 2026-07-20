@@ -17,6 +17,9 @@ Testrig reads optional global settings from `/etc/testrig/settings.toml` and `~/
 `ROCR_VISIBLE_DEVICES` can be set to a GPU UUID (or list accepted by ROCr, see [GPU Isolation Techniques](https://rocm.docs.amd.com/en/latest/conceptual/gpu-isolation.html#rocr-visible-devices)) to control GPU visibility during test binary execution.
 By default this setting is empty. When empty, testrig takes no additional action.
 
+`gdb_pyfile_dir` sets the directory containing the `gdb_traceback_on_stop.py` helper that testrig sources when gathering debug information on failed tests.
+By default this is `/usr/share/testrig`.
+
 ## Code Formatting
 
 All python code is formatted with [ruff](https://docs.astral.sh/ruff/formatter/)

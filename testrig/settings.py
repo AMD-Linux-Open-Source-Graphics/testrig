@@ -17,6 +17,8 @@ DEFAULT_SETTINGS = {
     "disable_debug": False,
     # GPU UUID(s) to expose during test execution; empty means no override
     "ROCR_VISIBLE_DEVICES": "",
+    # directory containing the gdb python helper (gdb_traceback_on_stop.py)
+    "gdb_pyfile_dir": "/usr/share/testrig",
 }
 
 

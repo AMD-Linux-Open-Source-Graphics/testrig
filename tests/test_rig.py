@@ -608,6 +608,55 @@ class TestGatherDebugInfo:
 
         assert "gdb failed for /bin/test_a with return code 1" in caplog.text
 
+    @patch("testrig.rig.subprocess.run")
+    def test_defaults_gdb_pyfile_dir(self, mock_subproc, tmp_path):
+        mock_subproc.return_value = MagicMock(returncode=0)
+
+        distro = make_mock_distro("ubuntu")
+        distro.check_for_installed_packages.return_value = True
+
+        spec = {
+            "name": "test",
+            "ubuntu": {
+                "test_binary_path": "/bin",
+                "test_package_name": "pkg",
+                "test_debug_package_names": ["pkg-dbg"],
+            },
+        }
+        run = make_rig(spec=spec)
+        run.distro = distro
+        run.workdir = str(tmp_path)
+
+        run.gather_debug_info(["/bin/test_a"])
+
+        content = (tmp_path / "run_debug.gdb").read_text()
+        assert "source /usr/share/testrig/gdb_traceback_on_stop.py" in content
+
+    @patch("testrig.rig.subprocess.run")
+    def test_uses_configured_gdb_pyfile_dir(self, mock_subproc, tmp_path):
+        mock_subproc.return_value = MagicMock(returncode=0)
+
+        distro = make_mock_distro("ubuntu")
+        distro.check_for_installed_packages.return_value = True
+
+        spec = {
+            "name": "test",
+            "ubuntu": {
+                "test_binary_path": "/bin",
+                "test_package_name": "pkg",
+                "test_debug_package_names": ["pkg-dbg"],
+            },
+        }
+        run = make_rig(spec=spec)
+        run.distro = distro
+        run.workdir = str(tmp_path)
+        run.settings = {"gdb_pyfile_dir": "/opt/testrig"}
+
+        run.gather_debug_info(["/bin/test_a"])
+
+        content = (tmp_path / "run_debug.gdb").read_text()
+        assert "source /opt/testrig/gdb_traceback_on_stop.py" in content
+
 
 # ==========================================================================
 # Group J: prepare()

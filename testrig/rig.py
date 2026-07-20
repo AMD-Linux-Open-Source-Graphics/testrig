@@ -206,7 +206,7 @@ class Rig:
         self.verify_debug_packages()
 
         # figure out path to the gdb python file we'll need
-        gdb_pyfile_dir = os.path.dirname(os.path.abspath(__file__))
+        gdb_pyfile_dir = self.settings.get("gdb_pyfile_dir", "/usr/share/testrig")
         gdb_pyfile_path = os.path.join(gdb_pyfile_dir, "gdb_traceback_on_stop.py")
 
         # create gdb batch file

@@ -324,6 +324,36 @@ class TestAptPackageManagerCheckRoot:
 
 
 # ==========================================================================
+# Group G2: PackageManager._run_command()
+# ==========================================================================
+
+
+class TestRunCommand:
+    @patch("testrig.packagemanager.subprocess.run")
+    def test_returns_returncode_and_stdout(self, mock_subproc):
+        """_run_command returns a (returncode, stdout) tuple so callers can
+        check the exit status instead of relying on stdout alone."""
+        mock_subproc.return_value = MagicMock(stdout=b"1.2.3", returncode=0)
+        pm = AptPackageManager()
+
+        returncode, stdout = pm._run_command(["some", "command"])
+
+        assert returncode == 0
+        assert stdout == "1.2.3"
+
+    @patch("testrig.packagemanager.subprocess.run")
+    def test_returns_nonzero_returncode(self, mock_subproc):
+        """A failing command's non-zero return code is surfaced to callers."""
+        mock_subproc.return_value = MagicMock(stdout=b"", returncode=1)
+        pm = AptPackageManager()
+
+        returncode, stdout = pm._run_command(["some", "command"])
+
+        assert returncode == 1
+        assert stdout == ""
+
+
+# ==========================================================================
 # Group H: AptPackageManager.is_installed()
 # ==========================================================================
 
@@ -344,19 +374,38 @@ class TestAptIsInstalled:
         )
 
     @patch("testrig.packagemanager.apt.subprocess.run")
-    def test_missing_package_returns_empty_string_not_none(self, mock_subproc):
-        """BUG: _run_command uses check=False, so CalledProcessError is never
-        raised. The except clause is dead code. For missing packages, dpkg-query
-        returns empty stdout with a non-zero returncode, so is_installed returns
-        empty string '' (falsy) rather than None."""
+    def test_missing_package_returns_none_on_nonzero_returncode(self, mock_subproc):
+        """_run_command returns the return code and is_installed checks it.
+        For missing packages, dpkg-query returns a non-zero returncode, so
+        is_installed returns None regardless of stdout contents."""
         mock_subproc.return_value = MagicMock(stdout=b"", returncode=1)
         pm = AptPackageManager()
 
         result = pm.is_installed("nonexistent")
 
-        # Returns empty string, NOT None (the except path is dead)
-        assert result == ""
-        assert result is not None
+        assert result is None
+
+    @patch("testrig.packagemanager.apt.subprocess.run")
+    def test_nonzero_returncode_with_stdout_still_returns_none(self, mock_subproc):
+        """Even if the command writes something to stdout, a non-zero return
+        code means the package is not installed, so is_installed returns None."""
+        mock_subproc.return_value = MagicMock(stdout=b"some noise", returncode=1)
+        pm = AptPackageManager()
+
+        result = pm.is_installed("nonexistent")
+
+        assert result is None
+
+    @patch("testrig.packagemanager.apt.subprocess.run")
+    def test_zero_returncode_returns_version(self, mock_subproc):
+        """A zero return code means the package is installed, so the version
+        string from stdout is returned."""
+        mock_subproc.return_value = MagicMock(stdout=b"1.2.3-1ubuntu1", returncode=0)
+        pm = AptPackageManager()
+
+        result = pm.is_installed("mypkg")
+
+        assert result == "1.2.3-1ubuntu1"
 
 
 # ==========================================================================
@@ -408,12 +457,10 @@ class TestAptGetPackageInfo:
 
     @patch("testrig.packagemanager.apt.subprocess.run")
     def test_raises_when_not_installed(self, mock_subproc):
-        """When is_installed returns empty string (falsy but not None),
-        get_package_info does NOT raise because `if '' is None` is False.
-        BUG: The None check doesn't catch empty string returns."""
+        """When the package is not installed dpkg-query returns a non-zero
+        return code, is_installed returns None, and get_package_info raises."""
         mock_subproc.return_value = MagicMock(stdout=b"", returncode=1)
         pm = AptPackageManager()
 
-        # Empty string is not None, so it bypasses the None check and returns ""
-        result = pm.get_package_info("nonexistent")
-        assert result == ""
+        with pytest.raises(Exception, match="package nonexistent not installed"):
+            pm.get_package_info("nonexistent")

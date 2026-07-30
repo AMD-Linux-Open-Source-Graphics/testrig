@@ -13,9 +13,8 @@ logger = logging.getLogger(__name__)
 class DnfPackageManager(PackageManager):
     def is_installed(self, package_name):
         command = ["rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}", package_name]
-        try:
-            version = self._run_command(command)
-        except subprocess.CalledProcessError:
+        returncode, version = self._run_command(command)
+        if returncode != 0:
             return None
 
         return version

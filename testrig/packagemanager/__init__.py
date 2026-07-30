@@ -19,7 +19,7 @@ class PackageManager(metaclass=ABCMeta):
 
     def _run_command(self, command):
         process = subprocess.run(command, check=False, capture_output=True)
-        return process.stdout.decode("utf-8")
+        return process.returncode, process.stdout.decode("utf-8")
 
     @abstractmethod
     def is_installed(self, package_name):

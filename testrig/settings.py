@@ -19,6 +19,8 @@ DEFAULT_SETTINGS = {
     "ROCR_VISIBLE_DEVICES": "",
     # directory containing the gdb python helper (gdb_traceback_on_stop.py)
     "gdb_pyfile_dir": "/usr/share/testrig",
+    # write output files (logs, run summary) to disk during rig execution
+    "enable_file_output": False,
 }
 
 

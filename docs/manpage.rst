@@ -73,6 +73,12 @@ gdb_pyfile_dir
     sources when gathering debug information on failed tests. Defaults to
     ``/usr/share/testrig``.
 
+enable_file_output
+    Enable writing output files (run log, output directory) to disk during
+    rig execution. Defaults to ``false``, meaning no files are created on the
+    filesystem unless overridden by this setting or the ``--file-output``
+    command-line option.
+
 Examples
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -99,6 +105,14 @@ Options
 
 --dry-run
     Describe the test to be run without actually execting anything
+
+--output-dir=<path to directory>
+    Base directory for storing output files. Defaults to ``./testrig-logs``.
+
+--file-output / --no-file-output
+    Enable or disable writing output files to disk for this run. Overrides
+    the ``enable_file_output`` setting; if neither flag is given, the setting
+    (default: disabled) is used.
 
 run
 -----

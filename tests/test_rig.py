@@ -35,6 +35,16 @@ def make_mock_distro(name="ubuntu"):
     return distro
 
 
+def make_popen_mock(mock_popen, returncode=0, stdout_lines=None):
+    """Configure mock_popen (a patched subprocess.Popen) to behave like a real Popen."""
+    process = MagicMock()
+    process.stdout.__iter__.return_value = iter(stdout_lines or [])
+    process.returncode = returncode
+    process.wait.return_value = returncode
+    mock_popen.return_value = process
+    return process
+
+
 # ==========================================================================
 # Group A: parse_rig()
 # ==========================================================================
@@ -205,9 +215,9 @@ class TestVerifyPackages:
 
 
 class TestExecuteBinary:
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_pass_returns_true(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
         run = make_rig()
 
         result = run._execute_binary("/fake/bin/test_a")
@@ -215,21 +225,21 @@ class TestExecuteBinary:
         assert result is True
         expected_env = os.environ.copy()
         mock_subproc.assert_called_once_with(
-            ["/fake/bin/test_a"], check=False, stderr=subprocess.STDOUT, env=expected_env
+            ["/fake/bin/test_a"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=expected_env, text=True, bufsize=1
         )
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_fail_returns_false(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(returncode=1)
+        make_popen_mock(mock_subproc, returncode=1)
         run = make_rig()
 
         result = run._execute_binary("/fake/bin/test_a")
 
         assert result is False
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_extra_args_appended(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
         spec = {"name": "test", "extra_args": ["--gtest_filter=Foo", "--verbose"]}
         run = make_rig(spec=spec)
 
@@ -237,11 +247,13 @@ class TestExecuteBinary:
 
         expected_cmd = ["/fake/bin/test_a", "--gtest_filter=Foo", "--verbose"]
         expected_env = os.environ.copy()
-        mock_subproc.assert_called_once_with(expected_cmd, check=False, stderr=subprocess.STDOUT, env=expected_env)
+        mock_subproc.assert_called_once_with(
+            expected_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=expected_env, text=True, bufsize=1
+        )
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_sets_rocr_visible_devices_when_configured(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
         run = make_rig(spec={"name": "test"})
         run.settings = {"ROCR_VISIBLE_DEVICES": "GPU-123"}
 
@@ -251,9 +263,11 @@ class TestExecuteBinary:
         expected_env["ROCR_VISIBLE_DEVICES"] = "GPU-123"
         mock_subproc.assert_called_once_with(
             ["/fake/bin/test_a"],
-            check=False,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=expected_env,
+            text=True,
+            bufsize=1,
         )
 
 
@@ -320,9 +334,9 @@ class TestResolveTestBinaries:
 
 
 class TestRunTests:
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_all_pass(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
 
         run = make_rig()
         run.distro = make_mock_distro()
@@ -333,9 +347,9 @@ class TestRunTests:
 
         assert result == {"passed": ["/bin/test_a", "/bin/test_b"], "failed": []}
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_all_fail(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(returncode=1)
+        make_popen_mock(mock_subproc, returncode=1)
 
         run = make_rig()
         run.distro = make_mock_distro()
@@ -346,11 +360,11 @@ class TestRunTests:
 
         assert result == {"passed": [], "failed": ["/bin/test_a", "/bin/test_b"]}
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_mixed_results(self, mock_subproc):
         mock_subproc.side_effect = [
-            MagicMock(returncode=0),
-            MagicMock(returncode=1),
+            make_popen_mock(MagicMock(), returncode=0),
+            make_popen_mock(MagicMock(), returncode=1),
         ]
 
         run = make_rig()
@@ -362,11 +376,11 @@ class TestRunTests:
 
         assert result == {"passed": ["/bin/test_a"], "failed": ["/bin/test_b"]}
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_total_tests_print_bug(self, mock_subproc, caplog):
         """BUG: 'total tests run: '.format(num_tests_run) has no {} placeholder.
         The count is silently lost."""
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
 
         run = make_rig()
         run.distro = make_mock_distro()
@@ -402,7 +416,7 @@ class TestRunTests:
 
 
 class TestExecute:
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake")
     @patch("testrig.rig.get_distro")
     def test_normal_mode_returns_results(self, mock_get_distro, mock_mkdtemp, mock_subproc):
@@ -411,7 +425,7 @@ class TestExecute:
         mock_distro.get_package_info.return_value = "1.0"
         mock_get_distro.return_value = mock_distro
 
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
 
         spec = {
             "name": "test",
@@ -427,7 +441,7 @@ class TestExecute:
 
         assert result == {"passed": ["/opt/bin/test_a"], "failed": []}
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     @patch("testrig.rig.tempfile.mkdtemp")
     @patch("testrig.rig.get_distro")
     def test_force_debug_returns_empty_results(self, mock_get_distro, mock_mkdtemp, mock_subproc, tmp_path):
@@ -438,7 +452,7 @@ class TestExecute:
         mock_distro.check_for_installed_packages.return_value = True
         mock_distro.get_package_info.return_value = "1.0"
         mock_get_distro.return_value = mock_distro
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
 
         spec = {
             "name": "test",
@@ -455,7 +469,7 @@ class TestExecute:
 
         assert result == {"passed": [], "failed": []}
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake")
     @patch("testrig.rig.get_distro")
     def test_disable_debug_overrides_force_debug(self, mock_get_distro, mock_mkdtemp, mock_subproc):
@@ -465,7 +479,7 @@ class TestExecute:
         mock_distro.get_package_info.return_value = "1.0"
         mock_get_distro.return_value = mock_distro
 
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
 
         spec = {
             "name": "test",
@@ -481,7 +495,7 @@ class TestExecute:
 
         assert result == {"passed": ["/opt/bin/test_a"], "failed": []}
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake")
     @patch("testrig.rig.get_distro")
     def test_disable_debug_runs_tests(self, mock_get_distro, mock_mkdtemp, mock_subproc):
@@ -491,7 +505,7 @@ class TestExecute:
         mock_distro.get_package_info.return_value = "1.0"
         mock_get_distro.return_value = mock_distro
 
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
 
         spec = {
             "name": "test",
@@ -552,9 +566,9 @@ class TestVerifyDebugPackages:
 
 
 class TestGatherDebugInfo:
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_writes_gdb_batch_and_runs(self, mock_subproc, tmp_path):
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
 
         distro = make_mock_distro("ubuntu")
         distro.check_for_installed_packages.return_value = True
@@ -585,9 +599,9 @@ class TestGatherDebugInfo:
         gdb_calls = [c for c in mock_subproc.call_args_list if c[0][0][0] == "gdb"]
         assert len(gdb_calls) == 2
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_gdb_failure_prints_message(self, mock_subproc, tmp_path, caplog):
-        mock_subproc.return_value = MagicMock(returncode=1)
+        make_popen_mock(mock_subproc, returncode=1)
 
         distro = make_mock_distro("ubuntu")
         distro.check_for_installed_packages.return_value = True
@@ -608,9 +622,9 @@ class TestGatherDebugInfo:
 
         assert "gdb failed for /bin/test_a with return code 1" in caplog.text
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_defaults_gdb_pyfile_dir(self, mock_subproc, tmp_path):
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
 
         distro = make_mock_distro("ubuntu")
         distro.check_for_installed_packages.return_value = True
@@ -632,9 +646,9 @@ class TestGatherDebugInfo:
         content = (tmp_path / "run_debug.gdb").read_text()
         assert "source /usr/share/testrig/gdb_traceback_on_stop.py" in content
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_uses_configured_gdb_pyfile_dir(self, mock_subproc, tmp_path):
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
 
         distro = make_mock_distro("ubuntu")
         distro.check_for_installed_packages.return_value = True
@@ -664,9 +678,9 @@ class TestGatherDebugInfo:
 
 
 class TestPrepare:
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_calls_rocminfo(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
 
         run = make_rig()
         run.distro = make_mock_distro()
@@ -675,9 +689,11 @@ class TestPrepare:
         run.prepare()
 
         expected_env = os.environ.copy()
-        mock_subproc.assert_called_once_with(["rocminfo"], check=True, stderr=subprocess.STDOUT, env=expected_env)
+        mock_subproc.assert_called_once_with(
+            ["rocminfo"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=expected_env, text=True, bufsize=1
+        )
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_skips_rocminfo_in_dry_run(self, mock_subproc, caplog):
         run = make_rig(dry_run=True)
         run.distro = make_mock_distro()
@@ -826,8 +842,9 @@ class TestBuildRunEnv:
 
 
 class TestRunCommand:
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_passes_built_env_and_redirects_stderr(self, mock_subproc):
+        make_popen_mock(mock_subproc, returncode=0)
         run = make_rig()
         run.settings = {"ROCR_VISIBLE_DEVICES": "GPU-123"}
 
@@ -837,30 +854,58 @@ class TestRunCommand:
         expected_env["ROCR_VISIBLE_DEVICES"] = "GPU-123"
         mock_subproc.assert_called_once_with(
             ["some", "command"],
-            check=False,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=expected_env,
+            text=True,
+            bufsize=1,
         )
 
-    @patch("testrig.rig.subprocess.run")
-    def test_forwards_check_flag(self, mock_subproc):
-        run = make_rig()
+    def test_forwards_check_flag_and_raises_on_failure(self):
+        with patch("testrig.rig.subprocess.Popen") as mock_subproc:
+            make_popen_mock(mock_subproc, returncode=1)
+            run = make_rig()
 
-        run._run_command(["some", "command"], check=True)
+            with pytest.raises(subprocess.CalledProcessError):
+                run._run_command(["some", "command"], check=True)
 
-        expected_env = os.environ.copy()
-        mock_subproc.assert_called_once_with(
-            ["some", "command"],
-            check=True,
-            stderr=subprocess.STDOUT,
-            env=expected_env,
-        )
+    def test_check_false_does_not_raise_on_failure(self):
+        with patch("testrig.rig.subprocess.Popen") as mock_subproc:
+            make_popen_mock(mock_subproc, returncode=1)
+            run = make_rig()
+
+            process = run._run_command(["some", "command"], check=False)
+
+            assert process.returncode == 1
+
+    def test_output_lines_are_logged_at_info(self, caplog):
+        with patch("testrig.rig.subprocess.Popen") as mock_subproc:
+            make_popen_mock(mock_subproc, returncode=0, stdout_lines=["line one\n", "line two\n"])
+            run = make_rig()
+
+            with caplog.at_level(logging.INFO):
+                run._run_command(["some", "command"])
+
+            assert "line one" in caplog.text
+            assert "line two" in caplog.text
+
+    def test_full_output_relogged_at_error_on_failure(self, caplog):
+        with patch("testrig.rig.subprocess.Popen") as mock_subproc:
+            make_popen_mock(mock_subproc, returncode=1, stdout_lines=["boom\n"])
+            run = make_rig()
+
+            with caplog.at_level(logging.INFO):
+                run._run_command(["some", "command"])
+
+            error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+            assert len(error_records) == 1
+            assert "boom" in error_records[0].getMessage()
 
 
 class TestSubprocessEnvPropagation:
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_rocminfo_receives_rocr_visible_devices(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
         run = make_rig(dry_run=False)
         run.distro = make_mock_distro()
         run.settings = {"ROCR_VISIBLE_DEVICES": "GPU-123"}
@@ -869,11 +914,13 @@ class TestSubprocessEnvPropagation:
 
         expected_env = os.environ.copy()
         expected_env["ROCR_VISIBLE_DEVICES"] = "GPU-123"
-        mock_subproc.assert_called_once_with(["rocminfo"], check=True, stderr=subprocess.STDOUT, env=expected_env)
+        mock_subproc.assert_called_once_with(
+            ["rocminfo"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=expected_env, text=True, bufsize=1
+        )
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_gdb_receives_rocr_visible_devices(self, mock_subproc, tmp_path):
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
 
         distro = make_mock_distro("ubuntu")
         distro.check_for_installed_packages.return_value = True
@@ -900,9 +947,9 @@ class TestSubprocessEnvPropagation:
         assert gdb_calls[0].kwargs["env"] == expected_env
         assert gdb_calls[0].kwargs["stderr"] == subprocess.STDOUT
 
-    @patch("testrig.rig.subprocess.run")
+    @patch("testrig.rig.subprocess.Popen")
     def test_execute_binary_receives_rocr_visible_devices(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(returncode=0)
+        make_popen_mock(mock_subproc, returncode=0)
         run = make_rig()
         run.settings = {"ROCR_VISIBLE_DEVICES": "GPU-123"}
 
@@ -912,7 +959,9 @@ class TestSubprocessEnvPropagation:
         expected_env["ROCR_VISIBLE_DEVICES"] = "GPU-123"
         mock_subproc.assert_called_once_with(
             ["/fake/bin/test_a"],
-            check=False,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=expected_env,
+            text=True,
+            bufsize=1,
         )

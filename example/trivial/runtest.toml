@@ -1,0 +1,18 @@
+name = "trivial"
+
+# Run testrig from this directory (test_binary_path is resolved against cwd).
+# To exercise failure/crash paths, uncomment one of the following:
+# extra_args = ["--exit-code", "1"]
+# extra_args = ["--crash-after", "2"]
+
+[fedora]
+test_binary_path = "."
+test_binaries = ["trivialtool.py"]
+test_package_name = "python3"
+test_debug_package_names = ["python3-debug"]
+
+[ubuntu]
+test_binary_path = "."
+test_binaries = ["trivialtool.py"]
+test_package_name = "python3"
+test_debug_package_names = ["python3-dbg"]

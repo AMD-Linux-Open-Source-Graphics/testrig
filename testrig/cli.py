@@ -6,13 +6,14 @@ import logging
 import os
 from pprint import pformat
 import sys
+import uuid
 
 import click
 
 from .rig import parse_rig
 from .settings import load_settings
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("testrig")
 
 
 @click.group()
@@ -28,8 +29,10 @@ logger = logging.getLogger(__name__)
 @click.option("--no-root", is_flag=True, default=False, help="Do not run as root")
 @click.option("--dry-run", is_flag=True, default=False, help="Perform a dry run without executing tests")
 @click.option("-v", "--verbose", is_flag=True, default=False, help="Enable verbose (debug) logging")
+@click.option("--output-dir", type=click.Path(dir_okay=True), default="./testrig-logs", help="Base directory for storing output files")
+@click.option("--no-file-output", is_flag=True, default=False, help="Disable writing output files")
 @click.pass_context
-def cli(ctx, run_directory, filename, debug, no_root, dry_run, verbose):
+def cli(ctx, run_directory, filename, debug, no_root, dry_run, verbose, output_dir, no_file_output):
     logging.basicConfig(
         format="%(levelname)s: %(message)s",
         level=logging.DEBUG if verbose else logging.INFO,
@@ -42,6 +45,8 @@ def cli(ctx, run_directory, filename, debug, no_root, dry_run, verbose):
     ctx.obj["no_root"] = no_root
     ctx.obj["dry_run"] = dry_run
     ctx.obj["settings"] = load_settings()
+    ctx.obj["output_dir"] = os.path.abspath(output_dir)
+    ctx.obj["no_file_output"] = no_file_output
 
     input_path = os.path.abspath(os.path.join(run_directory, filename))
     if not os.path.exists(input_path):
@@ -57,8 +62,20 @@ def cli(ctx, run_directory, filename, debug, no_root, dry_run, verbose):
 @click.pass_context
 def run_test(ctx, no_debug):
 
+    run_uuid = uuid.uuid7()
+
+    run_output_dir = None
+    if not ctx.obj["no_file_output"]:
+        run_output_dir = os.path.join(ctx.obj["output_dir"], str(run_uuid))
+    # create directory for output for this run
+    if not ctx.obj["no_file_output"]:
+        os.makedirs(run_output_dir, exist_ok=True)
+        ctx.obj["run_output_dir"] = run_output_dir
+        logger.info("Output directory for this run: {}".format(run_output_dir))
+        logger.addHandler(logging.FileHandler(os.path.join(run_output_dir, "testrig.log")))
+
     logger.info("Running test: {}".format(ctx.obj["filename"]))
-    rig = parse_rig(ctx.obj["input_path"], dry_run=ctx.obj["dry_run"], settings=ctx.obj["settings"])
+    rig = parse_rig(ctx.obj["input_path"], dry_run=ctx.obj["dry_run"], settings=ctx.obj["settings"], output_dir=run_output_dir)
     rig.no_root = ctx.obj["no_root"]
 
     logger.debug(pformat(rig.rig_spec))

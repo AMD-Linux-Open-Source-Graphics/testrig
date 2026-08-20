@@ -12,12 +12,12 @@ import tomllib
 
 from .util import get_distro
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("testrig.rig")
 
 REQUIRED_FIELDS = ["name"]
 
 
-def parse_rig(inputfile_path, dry_run=False, settings=None):
+def parse_rig(inputfile_path, dry_run=False, settings=None, output_dir=None):
     file_data = None
 
     with open(inputfile_path, "rb") as input_file:
@@ -26,7 +26,7 @@ def parse_rig(inputfile_path, dry_run=False, settings=None):
     for field_name in REQUIRED_FIELDS:
         if field_name not in file_data:
             raise Exception('Field "{}" is required but not found in {}'.format(field_name, inputfile_path))
-    return Rig(file_data["name"], file_data, dry_run, settings=settings)
+    return Rig(file_data["name"], file_data, dry_run, settings=settings, output_dir=output_dir)
 
 
 class Rig:
@@ -36,11 +36,12 @@ class Rig:
     workdir = None
     start_time = None
 
-    def __init__(self, name, spec, dry_run, settings=None):
+    def __init__(self, name, spec, dry_run, settings=None, output_dir=None):
         self.name = name
         self.rig_spec = spec
         self.dry_run = dry_run
         self.settings = settings or {}
+        self.output_dir = output_dir or os.path.abspath(".")
 
         # TODO derive data from rig_spec
 
@@ -72,7 +73,36 @@ class Rig:
         return run_env
 
     def _run_command(self, command, check=False):
-        return subprocess.run(command, check=check, stderr=subprocess.STDOUT, env=self._build_run_env())
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=self._build_run_env(),
+            text=True,
+            bufsize=1,
+        )
+
+        output_lines = []
+        try:
+            for line in process.stdout:
+                line = line.rstrip("\n")
+                output_lines.append(line)
+                logger.info(line)
+        finally:
+            process.stdout.close()
+            process.wait()
+
+        if process.returncode != 0:
+            logger.error(
+                "command '%s' failed with returncode %s, full output:\n%s",
+                " ".join(command),
+                process.returncode,
+                "\n".join(output_lines),
+            )
+            if check:
+                raise subprocess.CalledProcessError(process.returncode, command, output="\n".join(output_lines))
+
+        return process
 
     def _gather_rocm_info(self):
         logger.info("--------------------------------------------------------------------------------")

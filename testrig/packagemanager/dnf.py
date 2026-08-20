@@ -24,16 +24,16 @@ class DnfPackageManager(PackageManager):
         command.extend(package_names)
         try:
             self._run_command(command)
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError:
             logger.error("installation of packages ({}) failed".format(" ".join(package_names)))
-            raise e
+            raise
 
         logger.info("packages installed '{}".format(" ".join(package_names)))
 
     def get_package_info(self, package_name):
         package_version = self.is_installed(package_name)
         if package_version is None:
-            raise Exception("package {} not installed".format(package_name))
+            raise Exception(f"package {package_name} not installed")
         return package_version
 
     def get_installed_packages(self):

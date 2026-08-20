@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import os
+
 import tomllib
 
 # Listed in reverse order of precedence: paths later in the list override

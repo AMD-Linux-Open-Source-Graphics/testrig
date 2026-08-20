@@ -4,9 +4,9 @@
 
 import logging
 import os
-from pprint import pformat
 import sys
 import uuid
+from pprint import pformat
 
 import click
 
@@ -29,7 +29,12 @@ logger = logging.getLogger("testrig")
 @click.option("--no-root", is_flag=True, default=False, help="Do not run as root")
 @click.option("--dry-run", is_flag=True, default=False, help="Perform a dry run without executing tests")
 @click.option("-v", "--verbose", is_flag=True, default=False, help="Enable verbose (debug) logging")
-@click.option("--output-dir", type=click.Path(dir_okay=True), default="./testrig-logs", help="Base directory for storing output files")
+@click.option(
+    "--output-dir",
+    type=click.Path(dir_okay=True),
+    default="./testrig-logs",
+    help="Base directory for storing output files",
+)
 @click.option(
     "--file-output/--no-file-output",
     "file_output",
@@ -58,7 +63,7 @@ def cli(ctx, run_directory, filename, debug, no_root, dry_run, verbose, output_d
 
     input_path = os.path.abspath(os.path.join(run_directory, filename))
     if not os.path.exists(input_path):
-        raise Exception("Input file not found: {}".format(input_path))
+        raise Exception(f"Input file not found: {input_path}")
 
     ctx.obj["input_path"] = input_path
 
@@ -78,9 +83,11 @@ def run_test(ctx, no_debug):
         run_output_dir = os.path.join(ctx.obj["output_dir"], str(run_uuid))
         os.makedirs(run_output_dir, exist_ok=True)
         ctx.obj["run_output_dir"] = run_output_dir
-        logger.info("Output directory for this run: {}".format(run_output_dir))
+        logger.info(f"Output directory for this run: {run_output_dir}")
         filelog_handler = logging.FileHandler(os.path.join(run_output_dir, "testrig.log"))
-        filelog_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s: %(message)s", datefmt="%Y-%m-%dT%H:%M:%S%z"))
+        filelog_handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(levelname)s: %(message)s", datefmt="%Y-%m-%dT%H:%M:%S%z")
+        )
         logger.addHandler(filelog_handler)
 
     logger.info("Running test: {}".format(ctx.obj["filename"]))
@@ -97,7 +104,7 @@ def run_test(ctx, no_debug):
     logger.debug(pformat(rig.rig_spec))
 
     disable_debug = ctx.obj["settings"]["disable_debug"]
-    logger.debug("disable_debug: {}".format(disable_debug))
+    logger.debug(f"disable_debug: {disable_debug}")
 
     results = rig.execute(force_debug=ctx.obj["debug"], disable_debug=disable_debug)
 

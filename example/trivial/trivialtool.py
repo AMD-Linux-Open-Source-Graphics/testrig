@@ -13,7 +13,9 @@ import click
 
 
 @click.command()
-@click.option("-e", "--exit-code", type=int, default=0, help="Exit with this return code (ignored if --crash-after is set)")
+@click.option(
+    "-e", "--exit-code", type=int, default=0, help="Exit with this return code (ignored if --crash-after is set)"
+)
 @click.option("--crash-after", type=float, default=None, help="Sleep this many seconds, then abort (SIGABRT)")
 def main(exit_code, crash_after):
     click.echo("trivialtool: running")

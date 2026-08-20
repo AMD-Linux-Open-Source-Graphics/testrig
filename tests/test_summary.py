@@ -252,9 +252,7 @@ class TestGatherGitInfo:
 
 class TestBuildSummary:
     def _load_schema(self):
-        schema_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "docs", "output_format.schema.json"
-        )
+        schema_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs", "output_format.schema.json")
         with open(schema_path, "r") as schema_file:
             return json.load(schema_file)
 

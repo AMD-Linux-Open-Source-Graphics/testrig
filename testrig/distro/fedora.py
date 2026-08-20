@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
-from . import BaseDistro
 from ..packagemanager.dnf import DnfPackageManager
+from . import BaseDistro
 
 
 class FedoraDistro(BaseDistro):

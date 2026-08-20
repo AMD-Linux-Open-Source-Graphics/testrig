@@ -15,7 +15,7 @@ class PackageManager(metaclass=ABCMeta):
     def _check_root(self):
         # check if user is root
         if not self.no_root and os.geteuid() != 0:
-            raise Exception("running as non-root user is not supported. detected uid: {}".format(os.geteuid()))
+            raise Exception(f"running as non-root user is not supported. detected uid: {os.geteuid()}")
 
     def _run_command(self, command):
         process = subprocess.run(command, check=False, capture_output=True)

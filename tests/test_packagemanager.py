@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, patch
 from testrig.packagemanager.apt import AptPackageManager
 from testrig.packagemanager.dnf import DnfPackageManager
 
-
 # ==========================================================================
 # DnfPackageManager.get_installed_packages()
 # ==========================================================================
@@ -19,9 +18,7 @@ from testrig.packagemanager.dnf import DnfPackageManager
 class TestDnfGetInstalledPackages:
     @patch("testrig.packagemanager.dnf.subprocess.run")
     def test_parses_name_and_version(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(
-            stdout=b"rocm-tests\t6.2.0-1\ngdb\t14.2-1\n", returncode=0
-        )
+        mock_subproc.return_value = MagicMock(stdout=b"rocm-tests\t6.2.0-1\ngdb\t14.2-1\n", returncode=0)
         pm = DnfPackageManager()
 
         result = pm.get_installed_packages()
@@ -80,9 +77,7 @@ class TestDnfGetInstalledPackages:
 class TestAptGetInstalledPackages:
     @patch("testrig.packagemanager.apt.subprocess.run")
     def test_parses_name_and_version(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(
-            stdout=b"gdb\t14.2-1\nmypkg\t1.2.3-1ubuntu1\n", returncode=0
-        )
+        mock_subproc.return_value = MagicMock(stdout=b"gdb\t14.2-1\nmypkg\t1.2.3-1ubuntu1\n", returncode=0)
         pm = AptPackageManager()
 
         result = pm.get_installed_packages()

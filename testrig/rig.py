@@ -2,13 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
-from datetime import datetime, timezone
 import logging
 import os
 import subprocess
 import tempfile
-import tomllib
+from datetime import datetime, timezone
 
+import tomllib
 
 from .util import get_distro
 
@@ -25,7 +25,7 @@ def parse_rig(inputfile_path, run_uuid, dry_run=False, settings=None, output_dir
 
     for field_name in REQUIRED_FIELDS:
         if field_name not in file_data:
-            raise Exception('Field "{}" is required but not found in {}'.format(field_name, inputfile_path))
+            raise Exception(f'Field "{field_name}" is required but not found in {inputfile_path}')
     abs_inputfile_path = os.path.abspath(inputfile_path)
     rig_dir = os.path.dirname(abs_inputfile_path)
     return Rig(
@@ -48,7 +48,18 @@ class Rig:
     workdir = None
     start_time = None
 
-    def __init__(self, name, spec, dry_run, run_uuid, settings=None, output_dir=None, file_output=False, rig_dir=None, inputfile_path=None):
+    def __init__(
+        self,
+        name,
+        spec,
+        dry_run,
+        run_uuid,
+        settings=None,
+        output_dir=None,
+        file_output=False,
+        rig_dir=None,
+        inputfile_path=None,
+    ):
         self.name = name
         self.rig_spec = spec
         self.dry_run = dry_run
@@ -69,7 +80,7 @@ class Rig:
     def _setup(self):
         self.distro = get_distro(no_root=self.no_root)
 
-        if self.distro.name not in self.rig_spec.keys():
+        if self.distro.name not in self.rig_spec:
             logger.info("no distro specified, assuming test binary is in $PATH")
             self.binary_path = os.path.abspath(".")
         else:
@@ -85,7 +96,7 @@ class Rig:
             logger.debug("setting ROCR_VISIBLE_DEVICES to %s", rocr_visible_devices)
             run_env["ROCR_VISIBLE_DEVICES"] = rocr_visible_devices
 
-        if self.distro is not None and self.distro.name in self.rig_spec.keys():
+        if self.distro is not None and self.distro.name in self.rig_spec:
             extra_env_var = self.rig_spec[self.distro.name].get("extra_env_var", {})
             for env_var_name, env_var_value in extra_env_var.items():
                 logger.debug("setting %s to %s", env_var_name, env_var_value)
@@ -135,7 +146,7 @@ class Rig:
         if not self.dry_run:
             process = self._run_command(["rocminfo"], check=True)
             if process.returncode != 0:
-                raise Exception("rocminfo failed - returncode {}".format(process.returncode))
+                raise Exception(f"rocminfo failed - returncode {process.returncode}")
             self.rocminfo_output = process.output
 
     def prepare(self):
@@ -156,7 +167,7 @@ class Rig:
         if self.distro is None:
             self._setup()
 
-        if self.distro.name not in self.rig_spec.keys():
+        if self.distro.name not in self.rig_spec:
             logger.info("no distro information specified, not checking for any packages")
         else:
             required_package = self.rig_spec[self.distro.name]["test_package_name"]
@@ -166,18 +177,18 @@ class Rig:
                 [required_package], install_if_not_present=do_install_missing_packages
             ):
                 package_info = self.distro.get_package_info(required_package)
-                logger.info('required test package "{}" is installed: {}'.format(required_package, package_info))
+                logger.info(f'required test package "{required_package}" is installed: {package_info}')
 
             else:
-                raise Exception('required test package "{}" is not installed.'.format(required_package))
+                raise Exception(f'required test package "{required_package}" is not installed.')
 
     def _execute_binary(self, binary_path):
         run_command = [binary_path]
-        if "extra_args" in self.rig_spec.keys():
+        if "extra_args" in self.rig_spec:
             run_command.extend(self.rig_spec["extra_args"])
 
         logger.info("------------------------------------------------------------")
-        logger.info("binary: {}".format(os.path.basename(binary_path)))
+        logger.info(f"binary: {os.path.basename(binary_path)}")
         logger.info("------------------------------------------------------------")
         logger.info("running command: '{}'".format(" ".join(run_command)))
 
@@ -206,14 +217,12 @@ class Rig:
             return False
 
     def _resolve_test_binaries(self):
-        if self.distro.name not in self.rig_spec.keys():
-            raise Exception(
-                "no distro section for {} in rig spec, cannot resolve test binaries".format(self.distro.name)
-            )
+        if self.distro.name not in self.rig_spec:
+            raise Exception(f"no distro section for {self.distro.name} in rig spec, cannot resolve test binaries")
 
         distro_spec = self.rig_spec[self.distro.name]
         if "test_binaries" not in distro_spec:
-            raise Exception('required field "test_binaries" is not specified for distro {}'.format(self.distro.name))
+            raise Exception(f'required field "test_binaries" is not specified for distro {self.distro.name}')
 
         self.test_binaries = [
             os.path.join(self.binary_path, binary_name) for binary_name in distro_spec["test_binaries"]
@@ -239,13 +248,13 @@ class Rig:
         logger.info("RESULTS")
         logger.info("================================================================================")
         num_tests_run = len(passed_tests) + len(failed_tests)
-        logger.info("total tests run: {}".format(num_tests_run))
-        logger.info("passed tests ({}/{}):".format(len(passed_tests), num_tests_run))
+        logger.info(f"total tests run: {num_tests_run}")
+        logger.info(f"passed tests ({len(passed_tests)}/{num_tests_run}):")
         for passed_test in passed_tests:
-            logger.info("  {}".format(passed_test))
-        logger.info("failed tests ({}/{}):".format(len(failed_tests), num_tests_run))
+            logger.info(f"  {passed_test}")
+        logger.info(f"failed tests ({len(failed_tests)}/{num_tests_run}):")
         for failed_test in failed_tests:
-            logger.info("  {}".format(failed_test))
+            logger.info(f"  {failed_test}")
         return {"passed": passed_tests, "failed": failed_tests}
 
     def verify_debug_packages(self):
@@ -255,7 +264,7 @@ class Rig:
         # note - apt and/or dpkg doesn't install debug symbols for dependent packages
         # this code is going to have to get smarter (look for deps) or this will need to be a package list and it'll
         # be up to the user to specify all the debug packages
-        if self.distro.name not in self.rig_spec.keys():
+        if self.distro.name not in self.rig_spec:
             logger.info("no distro information specified, not checking for any packages")
         else:
             required_packages = self.rig_spec[self.distro.name]["test_debug_package_names"]
@@ -269,7 +278,7 @@ class Rig:
         logger.info("================================================================================")
         logger.info("gathering debug information for:")
         for failed_binary in failed_binaries:
-            logger.info("  {}".format(failed_binary))
+            logger.info(f"  {failed_binary}")
         logger.info("================================================================================")
 
         self.verify_debug_packages()
@@ -283,30 +292,30 @@ class Rig:
         with open(gdb_batch_file_path, "w+") as gdb_batch_file:
             gdb_batch_file.write("# gdb batch file created by testrig on {}\n".format("%Y%m%d-%H%M%S"))
             gdb_batch_file.write("\n")
-            gdb_batch_file.write("source {}\n".format(gdb_pyfile_path))
+            gdb_batch_file.write(f"source {gdb_pyfile_path}\n")
             gdb_batch_file.write("\n")
             gdb_batch_file.write("run\n")
 
         # run gdb
         for failed_binary in failed_binaries:
             logger.info("------------------------------------------------------------")
-            logger.info("debug binary: {}".format(os.path.basename(failed_binary)))
+            logger.info(f"debug binary: {os.path.basename(failed_binary)}")
             logger.info("------------------------------------------------------------")
-            gdb_command = ["gdb", "--batch", "--command={}".format(gdb_batch_file_path), failed_binary]
+            gdb_command = ["gdb", "--batch", f"--command={gdb_batch_file_path}", failed_binary]
             logger.info("gdb command: {}".format(" ".join(gdb_command)))
             process = self._run_command(gdb_command)
             if process.returncode != 0:
-                logger.warning("gdb failed for {} with return code {}".format(failed_binary, process.returncode))
+                logger.warning(f"gdb failed for {failed_binary} with return code {process.returncode}")
 
     def execute(self, force_debug=False, disable_debug=False):
         self.start_time = datetime.now(timezone.utc)
-        logger.info("Running test for {}".format(self.name))
+        logger.info(f"Running test for {self.name}")
 
         logger.info("================================================================================")
         logger.info("running check")
         logger.info("================================================================================")
         self._setup()
-        logger.info("identified distro as {}".format(self.distro.name))
+        logger.info(f"identified distro as {self.distro.name}")
         self.verify_packages()
 
         logger.info("================================================================================")
@@ -339,7 +348,7 @@ class Rig:
         runtime = datetime.now(timezone.utc) - self.start_time
         logger.info("Rig run started at: {}".format(self.start_time.strftime("%Y-%m-%d %H:%M:%S")))
         logger.info("Rig run completed at: {}".format((self.start_time + runtime).strftime("%Y-%m-%d %H:%M:%S")))
-        logger.info("Total runtime: {}".format(runtime))
+        logger.info(f"Total runtime: {runtime}")
 
         from .summary import build_summary, write_summary
 
@@ -347,4 +356,3 @@ class Rig:
             write_summary(build_summary(self), self.output_dir)
 
         return run_result
-

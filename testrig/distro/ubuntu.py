@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
-from . import BaseDistro
 from ..packagemanager.apt import AptPackageManager
+from . import BaseDistro
 
 
 class UbuntuDistro(BaseDistro):

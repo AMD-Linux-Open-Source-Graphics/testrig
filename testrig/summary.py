@@ -2,8 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-from datetime import timezone, datetime
-from importlib.metadata import PackageNotFoundError, version
 import grp
 import json
 import logging
@@ -13,6 +11,8 @@ import pwd
 import re
 import socket
 import subprocess
+from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version
 
 logger = logging.getLogger("testrig.summary")
 
@@ -37,10 +37,10 @@ def _iso_duration(td):
     minutes, seconds = divmod(remainder, 60)
     duration = "PT"
     if hours:
-        duration += "{}H".format(hours)
+        duration += f"{hours}H"
     if minutes:
-        duration += "{}M".format(minutes)
-    duration += "{}S".format(seconds)
+        duration += f"{minutes}M"
+    duration += f"{seconds}S"
     return duration
 
 
@@ -55,7 +55,7 @@ def _read_proc_meminfo_kib(key):
 def _format_kib_as_gib(kib):
     if kib is None:
         return None
-    return "{} GiB".format(round(kib / (1024 * 1024)))
+    return f"{round(kib / (1024 * 1024))} GiB"
 
 
 def _read_cpu_model():
@@ -88,7 +88,7 @@ def _gather_system_info():
         "free_memory_at_run_start": _format_kib_as_gib(_read_proc_meminfo_kib("MemAvailable")),
         "user_account": pwd.getpwuid(os.getuid()).pw_name,
         # deduplicate group names as there are cases where the same group can appear multiple times
-        "user_account_groups": list(set([grp.getgrgid(gid).gr_name for gid in os.getgroups()])),
+        "user_account_groups": list({grp.getgrgid(gid).gr_name for gid in os.getgroups()}),
         "hostname": socket.gethostname(),
         "container_type": _detect_container_type(),
     }

@@ -9,16 +9,14 @@ These tests document actual behavior, not desired behavior. Bugs are
 asserted as-is and flagged with comments.
 """
 
-from unittest.mock import MagicMock, mock_open, patch
-
 import logging
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
 from testrig.distro import BaseDistro
 from testrig.distro.ubuntu import UbuntuDistro
 from testrig.packagemanager.apt import AptPackageManager
-
 
 # --------------------------------------------------------------------------
 # Helpers
@@ -39,12 +37,12 @@ def make_mock_package_manager():
 def fake_os_release(os_id="ubuntu", version_id="22.04", id_like=None):
     lines = [
         'NAME="Ubuntu"\n',
-        "ID={}\n".format(os_id),
-        'VERSION_ID="{}"\n'.format(version_id),
-        'PRETTY_NAME="Ubuntu {}"\n'.format(version_id),
+        f"ID={os_id}\n",
+        f'VERSION_ID="{version_id}"\n',
+        f'PRETTY_NAME="Ubuntu {version_id}"\n',
     ]
     if id_like is not None:
-        lines.append('ID_LIKE="{}"\n'.format(id_like))
+        lines.append(f'ID_LIKE="{id_like}"\n')
     return "".join(lines)
 
 

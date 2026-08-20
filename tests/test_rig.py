@@ -8,15 +8,15 @@ These tests document actual behavior, not desired behavior. Bugs are
 asserted as-is and flagged with comments.
 """
 
-import os
 import logging
+import os
 import subprocess
 import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from testrig.rig import parse_rig, Rig
+from testrig.rig import Rig, parse_rig
 
 TEST_UUID = uuid.uuid7()
 
@@ -230,7 +230,12 @@ class TestExecuteBinary:
         assert result is True
         expected_env = os.environ.copy()
         mock_subproc.assert_called_once_with(
-            ["/fake/bin/test_a"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=expected_env, text=True, bufsize=1
+            ["/fake/bin/test_a"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=expected_env,
+            text=True,
+            bufsize=1,
         )
 
     @patch("testrig.rig.subprocess.Popen")

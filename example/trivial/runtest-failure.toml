@@ -1,8 +1,8 @@
-name = "trivial"
+name = "trivial-failure"
 
-# Run testrig from this directory (test_binary_path is resolved against cwd).
-# For failure/crash scenarios, see runtest-failure.toml and runtest-crash.toml
-# (select with testrig's -f/--filename option).
+# Run testrig from this directory (test_binary_path is resolved against cwd),
+# e.g. `testrig -f runtest-failure.toml run`.
+extra_args = ["--exit-code", "1"]
 
 [fedora]
 test_binary_path = "."

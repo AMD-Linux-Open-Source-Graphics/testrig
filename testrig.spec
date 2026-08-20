@@ -4,7 +4,7 @@
 # inclusion in Fedora
 
 Name:          testrig
-Version:       0.0.7
+Version:       0.0.8
 Release:       1%{?dist}
 
 Summary:       tool for running tests in a repeatable way
@@ -58,6 +58,11 @@ install -pm 644 support/gdb_traceback_on_stop.py %{buildroot}%{_datadir}/%{name}
 
 
 %changelog
+* Thu Aug 20 2026 Tim Flink <tflink@fedoraproject.org> - 0.0.8-1
+- new upstream release 0.0.8
+  * add options to log output to file instead of just stdout
+  * add option to generate machine-readable summary of run
+
 * Mon Jul 20 2026 Tim Flink <tflink@fedoraproject.org> - 0.0.7-1
 - move gdb-specific python file out of module
 

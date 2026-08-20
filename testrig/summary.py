@@ -87,17 +87,28 @@ def _gather_system_info():
         "cpu_arch": platform.machine(),
         "free_memory_at_run_start": _format_kib_as_gib(_read_proc_meminfo_kib("MemAvailable")),
         "user_account": pwd.getpwuid(os.getuid()).pw_name,
-        "user_account_groups": [grp.getgrgid(gid).gr_name for gid in os.getgroups()],
+        # deduplicate group names as there are cases where the same group can appear multiple times
+        "user_account_groups": list(set([grp.getgrgid(gid).gr_name for gid in os.getgroups()])),
         "hostname": socket.gethostname(),
         "container_type": _detect_container_type(),
     }
 
 
-def _gather_kernel_info(distro):
+def _read_proc_version():
+    with open("/proc/version", "r") as proc_version_file:
+        return proc_version_file.read().strip()
+
+
+def _read_kernel_is_tainted():
+    with open("/proc/sys/kernel/tainted", "r") as tainted_file:
+        return int(tainted_file.read().strip())
+
+
+def _gather_kernel_info():
     return {
-        # TODO: distro.is_inbox_kernel() is unimplemented, defaults to False until it is
-        "is_inbox_kernel": distro.is_inbox_kernel() or False,
         "version": platform.uname().release,
+        "proc_version": _read_proc_version(),
+        "is_tainted": _read_kernel_is_tainted(),
     }
 
 
@@ -141,10 +152,10 @@ def _run_git(args, cwd):
         return None
 
 
-def _gather_git_info(rig_dir):
+def _gather_git_info(rig_dir, inputfile_path):
     revision = _run_git(["rev-parse", "HEAD"], rig_dir)
     if revision is None:
-        return {"repo_uri": None, "revision": None, "is_modified": None}
+        return {"repo_uri": None, "revision": None, "is_modified": None, "inputfile_path": inputfile_path}
 
     repo_uri = _run_git(["remote", "get-url", "origin"], rig_dir)
     status_output = _run_git(["status", "--porcelain"], rig_dir)
@@ -152,6 +163,7 @@ def _gather_git_info(rig_dir):
         "repo_uri": repo_uri,
         "revision": revision,
         "is_modified": bool(status_output) if status_output is not None else None,
+        "inputfile_path": inputfile_path,
     }
 
 
@@ -168,13 +180,10 @@ def build_summary(rig):
     start_time = rig.start_time or now
 
     runner_system_information = {
-        "kernel": _gather_kernel_info(rig.distro),
-        # TODO: rig.distro.get_installed_packages() is unimplemented
+        "kernel": _gather_kernel_info(),
         "installed_packages": rig.distro.get_installed_packages() or {},
-        # TODO: rig.distro.get_distro_family() is unimplemented
         "distro_family": rig.distro.get_distro_family() or "unknown",
         "distro": rig.distro.name,
-        # TODO: rig.distro.get_distro_release() is unimplemented
         "distro_release": rig.distro.get_distro_release() or "unknown",
         **_gather_system_info(),
     }
@@ -202,7 +211,7 @@ def build_summary(rig):
         "is_dry_run": rig.dry_run,
         "runner_system_information": runner_system_information,
         "gpu_information": _gather_gpu_info(rig.rocminfo_output),
-        "git_information": _gather_git_info(rig.rig_dir),
+        "git_information": _gather_git_info(rig.rig_dir, rig.inputfile_path),
         "test_information": test_information,
         "debug_run_information": {"was_debug_run": rig.was_debug_run, "binaries": rig.debug_binaries},
         "testrig_options": dict(rig.settings),

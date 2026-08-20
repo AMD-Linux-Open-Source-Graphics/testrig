@@ -32,3 +32,7 @@ class PackageManager(metaclass=ABCMeta):
     @abstractmethod
     def get_package_info(self, package_name):
         raise NotImplementedError
+
+    @abstractmethod
+    def get_installed_packages(self):
+        raise NotImplementedError

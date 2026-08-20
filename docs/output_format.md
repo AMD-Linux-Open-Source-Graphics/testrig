@@ -53,8 +53,9 @@ This list will likely change over time but the initial release will contain
  * is dry_run (true/false)
  * Runner System information:
    - running kernel information
-     + is inbox kernel (true/false)
      + version
+     + contents of /proc/version
+     + is tainted, raw integer value of /proc/sys/kernel/tainted (0 means not tainted)
    - list of all installed system packages with versions
      + name as key, version as value
    - distro family
@@ -80,6 +81,7 @@ This list will likely change over time but the initial release will contain
     - git repo URI
     - git revision
     - is modified (true/false)
+    - path to the rig configuration file (inputfile) used for this run
  * test information
    - list of individual results
      + binary
@@ -114,8 +116,9 @@ it is published.
   "is_dry_run": false,
   "runner_system_information": {
     "kernel": {
-      "is_inbox_kernel": true,
-      "version": "6.11.4-201.fc45.x86_64"
+      "version": "6.11.4-201.fc45.x86_64",
+      "proc_version": "Linux version 6.11.4-201.fc45.x86_64 (mockbuild@buildvm) (gcc version 14.2.1) #1 SMP PREEMPT_DYNAMIC Wed Aug 19 00:00:00 UTC 2026",
+      "is_tainted": 0
     },
     "installed_packages": {
       "rocm-tests": "6.2.0-1",
@@ -144,7 +147,8 @@ it is published.
   "git_information": {
     "repo_uri": "https://github.com/example/rocm-tests.git",
     "revision": "9f3c1a2b7d4e5f60718293a4b5c6d7e8f9012345",
-    "is_modified": false
+    "is_modified": false,
+    "inputfile_path": "/home/tflink/rocm-tests/runtest.toml"
   },
   "test_information": [
     {

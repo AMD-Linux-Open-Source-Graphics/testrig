@@ -62,7 +62,6 @@ def make_fake_rig(**overrides):
     distro.get_installed_packages.return_value = None
     distro.get_distro_family.return_value = None
     distro.get_distro_release.return_value = None
-    distro.is_inbox_kernel.return_value = None
 
     start_time = datetime(2026, 8, 19, 17, 0, 0, tzinfo=timezone.utc)
     rig = SimpleNamespace(
@@ -73,6 +72,7 @@ def make_fake_rig(**overrides):
         start_time=start_time,
         rocminfo_output=None,
         rig_dir="/nonexistent",
+        inputfile_path="/nonexistent/runtest.toml",
         test_results=[],
         was_debug_run=False,
         debug_binaries=[],
@@ -136,6 +136,51 @@ class TestDetectContainerType:
 
 
 # ==========================================================================
+# _gather_kernel_info / _read_proc_version / _read_kernel_is_tainted
+# ==========================================================================
+
+
+def _fake_open_for_paths(contents_by_path):
+    def _open(path, *args, **kwargs):
+        return mock_open(read_data=contents_by_path[path]).return_value
+
+    return _open
+
+
+class TestGatherKernelInfo:
+    @patch("testrig.summary.platform.uname")
+    @patch("testrig.summary.open")
+    def test_includes_version_proc_version_and_is_tainted(self, mock_open_builtin, mock_uname):
+        mock_uname.return_value = MagicMock(release="6.11.4-301.fc45.x86_64")
+        mock_open_builtin.side_effect = _fake_open_for_paths(
+            {
+                "/proc/version": "Linux version 6.11.4-301.fc45.x86_64 (mockbuild@buildvm) (gcc)\n",
+                "/proc/sys/kernel/tainted": "0\n",
+            }
+        )
+
+        result = summary._gather_kernel_info()
+
+        assert result == {
+            "version": "6.11.4-301.fc45.x86_64",
+            "proc_version": "Linux version 6.11.4-301.fc45.x86_64 (mockbuild@buildvm) (gcc)",
+            "is_tainted": 0,
+        }
+
+    @patch("testrig.summary.open", new_callable=mock_open, read_data="  some contents with trailing whitespace  \n")
+    def test_read_proc_version_strips_whitespace(self, mock_open_file):
+        assert summary._read_proc_version() == "some contents with trailing whitespace"
+
+    @patch("testrig.summary.open", new_callable=mock_open, read_data="0\n")
+    def test_is_tainted_zero_when_not_tainted(self, mock_open_file):
+        assert summary._read_kernel_is_tainted() == 0
+
+    @patch("testrig.summary.open", new_callable=mock_open, read_data="512\n")
+    def test_is_tainted_returns_raw_value(self, mock_open_file):
+        assert summary._read_kernel_is_tainted() == 512
+
+
+# ==========================================================================
 # _gather_gpu_info
 # ==========================================================================
 
@@ -163,9 +208,14 @@ class TestGatherGpuInfo:
 
 class TestGatherGitInfo:
     def test_non_repo_directory_returns_all_none(self, tmp_path):
-        info = summary._gather_git_info(str(tmp_path))
+        info = summary._gather_git_info(str(tmp_path), "/nonexistent/runtest.toml")
 
-        assert info == {"repo_uri": None, "revision": None, "is_modified": None}
+        assert info == {
+            "repo_uri": None,
+            "revision": None,
+            "is_modified": None,
+            "inputfile_path": "/nonexistent/runtest.toml",
+        }
 
     def test_clean_repo(self, tmp_path):
         subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
@@ -175,10 +225,11 @@ class TestGatherGitInfo:
         subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
         subprocess.run(["git", "commit", "-m", "initial"], cwd=tmp_path, check=True, capture_output=True)
 
-        info = summary._gather_git_info(str(tmp_path))
+        info = summary._gather_git_info(str(tmp_path), str(tmp_path / "runtest.toml"))
 
         assert info["revision"] is not None
         assert info["is_modified"] is False
+        assert info["inputfile_path"] == str(tmp_path / "runtest.toml")
 
     def test_modified_repo(self, tmp_path):
         subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
@@ -189,7 +240,7 @@ class TestGatherGitInfo:
         subprocess.run(["git", "commit", "-m", "initial"], cwd=tmp_path, check=True, capture_output=True)
         (tmp_path / "file.txt").write_text("changed\n")
 
-        info = summary._gather_git_info(str(tmp_path))
+        info = summary._gather_git_info(str(tmp_path), str(tmp_path / "runtest.toml"))
 
         assert info["is_modified"] is True
 
@@ -225,6 +276,13 @@ class TestBuildSummary:
         for key in required_keys:
             assert key in result["runner_system_information"]
 
+    def test_git_information_includes_inputfile_path(self):
+        rig = make_fake_rig(inputfile_path="/some/dir/runtest.toml")
+
+        result = summary.build_summary(rig)
+
+        assert result["git_information"]["inputfile_path"] == "/some/dir/runtest.toml"
+
     def test_todo_distro_fields_use_placeholders_when_unimplemented(self):
         rig = make_fake_rig()
 
@@ -234,7 +292,6 @@ class TestBuildSummary:
         assert system_info["distro_family"] == "unknown"
         assert system_info["distro_release"] == "unknown"
         assert system_info["installed_packages"] == {}
-        assert system_info["kernel"]["is_inbox_kernel"] is False
         assert system_info["distro"] == "fedora"
 
     def test_overall_result_pass(self):

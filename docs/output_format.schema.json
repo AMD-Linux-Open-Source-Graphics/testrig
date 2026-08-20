@@ -80,13 +80,17 @@
         "kernel": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["is_inbox_kernel", "version"],
+          "required": ["version", "proc_version", "is_tainted"],
           "properties": {
-            "is_inbox_kernel": {
-              "type": "boolean",
-              "description": "True if the running kernel is the distro-provided (inbox) kernel."
+            "version": { "type": "string" },
+            "proc_version": {
+              "type": "string",
+              "description": "Raw contents of /proc/version."
             },
-            "version": { "type": "string" }
+            "is_tainted": {
+              "type": "integer",
+              "description": "Raw value of /proc/sys/kernel/tainted (0 means not tainted)."
+            }
           }
         },
         "installed_packages": {
@@ -133,11 +137,15 @@
       "type": ["object", "null"],
       "description": "Git metadata for the test source, or null when unavailable.",
       "additionalProperties": false,
-      "required": ["repo_uri", "revision", "is_modified"],
+      "required": ["repo_uri", "revision", "is_modified", "inputfile_path"],
       "properties": {
         "repo_uri": { "type": ["string", "null"] },
         "revision": { "type": ["string", "null"] },
-        "is_modified": { "type": ["boolean", "null"] }
+        "is_modified": { "type": ["boolean", "null"] },
+        "inputfile_path": {
+          "type": ["string", "null"],
+          "description": "Absolute path to the rig configuration file (e.g. runtest.toml) used for this run."
+        }
       }
     },
     "test_information": {

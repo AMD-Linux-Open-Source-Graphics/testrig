@@ -26,7 +26,8 @@ def parse_rig(inputfile_path, run_uuid, dry_run=False, settings=None, output_dir
     for field_name in REQUIRED_FIELDS:
         if field_name not in file_data:
             raise Exception('Field "{}" is required but not found in {}'.format(field_name, inputfile_path))
-    rig_dir = os.path.dirname(os.path.abspath(inputfile_path))
+    abs_inputfile_path = os.path.abspath(inputfile_path)
+    rig_dir = os.path.dirname(abs_inputfile_path)
     return Rig(
         file_data["name"],
         file_data,
@@ -36,6 +37,7 @@ def parse_rig(inputfile_path, run_uuid, dry_run=False, settings=None, output_dir
         output_dir=output_dir,
         file_output=file_output,
         rig_dir=rig_dir,
+        inputfile_path=abs_inputfile_path,
     )
 
 
@@ -46,7 +48,7 @@ class Rig:
     workdir = None
     start_time = None
 
-    def __init__(self, name, spec, dry_run, run_uuid, settings=None, output_dir=None, file_output=False, rig_dir=None):
+    def __init__(self, name, spec, dry_run, run_uuid, settings=None, output_dir=None, file_output=False, rig_dir=None, inputfile_path=None):
         self.name = name
         self.rig_spec = spec
         self.dry_run = dry_run
@@ -55,6 +57,7 @@ class Rig:
         self.output_dir = output_dir or os.path.abspath(".")
         self.file_output = file_output
         self.rig_dir = rig_dir or os.path.abspath(".")
+        self.inputfile_path = inputfile_path
         self.test_results = []
         self.rocminfo_output = None
         self.run_result = None

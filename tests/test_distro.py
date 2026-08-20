@@ -36,13 +36,15 @@ def make_mock_package_manager():
     return pm
 
 
-def fake_os_release(os_id="ubuntu", version_id="22.04"):
+def fake_os_release(os_id="ubuntu", version_id="22.04", id_like=None):
     lines = [
         'NAME="Ubuntu"\n',
         "ID={}\n".format(os_id),
         'VERSION_ID="{}"\n'.format(version_id),
         'PRETTY_NAME="Ubuntu {}"\n'.format(version_id),
     ]
+    if id_like is not None:
+        lines.append('ID_LIKE="{}"\n'.format(id_like))
     return "".join(lines)
 
 
@@ -61,7 +63,7 @@ class TestGetDistro:
         assert isinstance(result, UbuntuDistro)
         assert result.name == "ubuntu"
         assert result.distro_data["id"] == "ubuntu"
-        assert result.distro_data["version"] == '"22.04"'
+        assert result.distro_data["version"] == "22.04"
         assert result.no_root is True
 
     @patch("builtins.open", mock_open(read_data=fake_os_release("fedora", "39")))
@@ -96,6 +98,22 @@ class TestGetDistro:
 
         result = get_distro()
         assert result.no_root is False
+
+    @patch("builtins.open", mock_open(read_data=fake_os_release("ubuntu", "22.04", id_like="debian")))
+    def test_parses_id_like(self):
+        from testrig.util import get_distro
+
+        result = get_distro(no_root=True)
+
+        assert result.distro_data["id_like"] == "debian"
+
+    @patch("builtins.open", mock_open(read_data=fake_os_release("fedora", "39")))
+    def test_id_like_defaults_to_none_when_absent(self):
+        from testrig.util import get_distro
+
+        result = get_distro(no_root=True)
+
+        assert result.distro_data["id_like"] is None
 
 
 # ==========================================================================
@@ -260,22 +278,68 @@ class TestGetPackageInfo:
 
 
 # ==========================================================================
-# Group F: UbuntuDistro stubs
+# Group F: UbuntuDistro get_installed_packages() / install_packages() stub
 # ==========================================================================
 
 
 class TestUbuntuDistroStubs:
-    def test_get_installed_packages_returns_none(self):
-        """get_installed_packages is a stub that does nothing (pass)."""
+    def test_get_installed_packages_delegates_to_package_manager(self):
         distro = make_ubuntu_distro()
+        pm = make_mock_package_manager()
+        pm.get_installed_packages.return_value = {"pkg-a": "1.0"}
+        distro.package_manager = pm
+
         result = distro.get_installed_packages()
-        assert result is None
+
+        assert result == {"pkg-a": "1.0"}
+        pm.get_installed_packages.assert_called_once()
+
+    def test_get_installed_packages_lazily_initializes_package_manager(self):
+        distro = make_ubuntu_distro()
+        assert distro.package_manager is None
+
+        with patch.object(distro, "_init_package_manager") as mock_init:
+
+            def set_pm():
+                pm = make_mock_package_manager()
+                pm.get_installed_packages.return_value = {}
+                distro.package_manager = pm
+
+            mock_init.side_effect = set_pm
+
+            distro.get_installed_packages()
+
+            mock_init.assert_called_once()
 
     def test_install_packages_returns_none(self):
         """install_packages is a stub that does nothing (pass)."""
         distro = make_ubuntu_distro()
         result = distro.install_packages(["pkg-a"])
         assert result is None
+
+
+# ==========================================================================
+# Group F2: BaseDistro.get_distro_family() / get_distro_release()
+# ==========================================================================
+
+
+class TestGetDistroFamily:
+    def test_falls_back_to_own_name_when_no_id_like(self):
+        distro = make_ubuntu_distro({"id": "ubuntu", "version": "22.04"})
+
+        assert distro.get_distro_family() == "ubuntu"
+
+    def test_returns_id_like_when_present(self):
+        distro = make_ubuntu_distro({"id": "ubuntu", "version": "22.04", "id_like": "debian"})
+
+        assert distro.get_distro_family() == "debian"
+
+
+class TestGetDistroRelease:
+    def test_returns_version_from_distro_data(self):
+        distro = make_ubuntu_distro({"id": "ubuntu", "version": "22.04"})
+
+        assert distro.get_distro_release() == "22.04"
 
 
 # ==========================================================================

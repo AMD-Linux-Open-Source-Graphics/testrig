@@ -67,6 +67,8 @@ class TestParseRun:
         assert result.rig_spec["name"] == "mytest"
         assert result.rig_spec["ubuntu"]["test_binary_path"] == "/opt/bin"
         assert result.dry_run is False
+        assert result.inputfile_path == os.path.abspath(str(toml_file))
+        assert result.rig_dir == os.path.dirname(os.path.abspath(str(toml_file)))
 
     def test_valid_toml_with_dry_run(self, tmp_path):
         toml_file = tmp_path / "runtest.toml"

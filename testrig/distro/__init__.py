@@ -19,9 +19,10 @@ class BaseDistro(metaclass=ABCMeta):
     def _init_package_manager(self):
         raise NotImplementedError
 
-    @abstractmethod
     def get_installed_packages(self):
-        raise NotImplementedError
+        if self.package_manager is None:
+            self._init_package_manager()
+        return self.package_manager.get_installed_packages()
 
     @abstractmethod
     def check_for_installed_packages(self, package_name, install_if_not_present=False):
@@ -35,17 +36,10 @@ class BaseDistro(metaclass=ABCMeta):
     def get_package_info(self, package_name):
         raise NotImplementedError
 
-    # TODO: implement for run summary output (see docs/output_format.md)
-    @abstractmethod
+    # ID_LIKE (see /etc/os-release) names the broader distro family; falls back to
+    # this distro's own name for distros that are themselves the family base
     def get_distro_family(self):
-        raise NotImplementedError
+        return self.distro_data.get("id_like") or self.name
 
-    # TODO: implement for run summary output (see docs/output_format.md)
-    @abstractmethod
     def get_distro_release(self):
-        raise NotImplementedError
-
-    # TODO: implement for run summary output (see docs/output_format.md)
-    @abstractmethod
-    def is_inbox_kernel(self):
-        raise NotImplementedError
+        return self.distro_data.get("version")

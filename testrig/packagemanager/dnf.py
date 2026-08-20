@@ -35,3 +35,17 @@ class DnfPackageManager(PackageManager):
         if package_version is None:
             raise Exception("package {} not installed".format(package_name))
         return package_version
+
+    def get_installed_packages(self):
+        command = ["rpm", "-qa", "--qf", "%{NAME}\t%|EPOCH?{%{EPOCH}:}:{}|%{VERSION}-%{RELEASE}\n"]
+        returncode, output = self._run_command(command)
+        if returncode != 0:
+            return {}
+
+        packages = {}
+        for line in output.splitlines():
+            if not line.strip():
+                continue
+            name, _, version = line.partition("\t")
+            packages[name] = version
+        return packages

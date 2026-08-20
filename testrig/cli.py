@@ -79,10 +79,19 @@ def run_test(ctx, no_debug):
         os.makedirs(run_output_dir, exist_ok=True)
         ctx.obj["run_output_dir"] = run_output_dir
         logger.info("Output directory for this run: {}".format(run_output_dir))
-        logger.addHandler(logging.FileHandler(os.path.join(run_output_dir, "testrig.log")))
+        filelog_handler = logging.FileHandler(os.path.join(run_output_dir, "testrig.log"))
+        filelog_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s: %(message)s", datefmt="%Y-%m-%dT%H:%M:%S%z"))
+        logger.addHandler(filelog_handler)
 
     logger.info("Running test: {}".format(ctx.obj["filename"]))
-    rig = parse_rig(ctx.obj["input_path"], dry_run=ctx.obj["dry_run"], settings=ctx.obj["settings"], output_dir=run_output_dir)
+    rig = parse_rig(
+        ctx.obj["input_path"],
+        run_uuid,
+        dry_run=ctx.obj["dry_run"],
+        settings=ctx.obj["settings"],
+        output_dir=run_output_dir,
+        file_output=ctx.obj["file_output"],
+    )
     rig.no_root = ctx.obj["no_root"]
 
     logger.debug(pformat(rig.rig_spec))
@@ -106,7 +115,7 @@ def run_test(ctx, no_debug):
 @click.pass_context
 def check_install(ctx, ignore_debug_packages, ignore_test_packages):
     logger.info("running install check for {}".format(ctx.obj["input_path"]))
-    rig = parse_rig(ctx.obj["input_path"], settings=ctx.obj["settings"])
+    rig = parse_rig(ctx.obj["input_path"], uuid.uuid7(), settings=ctx.obj["settings"])
     rig.no_root = ctx.obj["no_root"]
 
     if not ignore_test_packages:

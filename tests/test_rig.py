@@ -11,11 +11,14 @@ asserted as-is and flagged with comments.
 import os
 import logging
 import subprocess
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from testrig.rig import parse_rig, Rig
+
+TEST_UUID = uuid.uuid7()
 
 
 # --------------------------------------------------------------------------
@@ -23,10 +26,10 @@ from testrig.rig import parse_rig, Rig
 # --------------------------------------------------------------------------
 
 
-def make_rig(name="testrun", spec=None, dry_run=False):
+def make_rig(name="testrun", spec=None, dry_run=False, run_uuid=TEST_UUID):
     if spec is None:
         spec = {"name": name}
-    return Rig(name, spec, dry_run)
+    return Rig(name, spec, dry_run, run_uuid)
 
 
 def make_mock_distro(name="ubuntu"):
@@ -57,7 +60,7 @@ class TestParseRun:
             b'name = "mytest"\n[ubuntu]\ntest_binary_path = "/opt/bin"\ntest_package_name = "mypkg"\n'
         )
 
-        result = parse_rig(str(toml_file))
+        result = parse_rig(str(toml_file), TEST_UUID)
 
         assert isinstance(result, Rig)
         assert result.name == "mytest"
@@ -69,7 +72,7 @@ class TestParseRun:
         toml_file = tmp_path / "runtest.toml"
         toml_file.write_bytes(b'name = "drytest"\n')
 
-        result = parse_rig(str(toml_file), dry_run=True)
+        result = parse_rig(str(toml_file), TEST_UUID, dry_run=True)
 
         assert result.dry_run is True
         assert result.name == "drytest"
@@ -79,7 +82,7 @@ class TestParseRun:
         toml_file.write_bytes(b'name = "settingstest"\n')
         settings = {"ROCR_VISIBLE_DEVICES": "GPU-abc"}
 
-        result = parse_rig(str(toml_file), settings=settings)
+        result = parse_rig(str(toml_file), TEST_UUID, settings=settings)
 
         assert result.settings["ROCR_VISIBLE_DEVICES"] == "GPU-abc"
 
@@ -88,7 +91,7 @@ class TestParseRun:
         toml_file.write_bytes(b'[ubuntu]\ntest_binary_path = "/opt/bin"\n')
 
         with pytest.raises(Exception, match='Field "name" is required'):
-            parse_rig(str(toml_file))
+            parse_rig(str(toml_file), TEST_UUID)
 
 
 # ==========================================================================

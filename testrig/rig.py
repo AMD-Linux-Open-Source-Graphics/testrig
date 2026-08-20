@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import os
 import subprocess
@@ -17,7 +17,7 @@ logger = logging.getLogger("testrig.rig")
 REQUIRED_FIELDS = ["name"]
 
 
-def parse_rig(inputfile_path, dry_run=False, settings=None, output_dir=None):
+def parse_rig(inputfile_path, run_uuid, dry_run=False, settings=None, output_dir=None, file_output=False):
     file_data = None
 
     with open(inputfile_path, "rb") as input_file:
@@ -26,7 +26,17 @@ def parse_rig(inputfile_path, dry_run=False, settings=None, output_dir=None):
     for field_name in REQUIRED_FIELDS:
         if field_name not in file_data:
             raise Exception('Field "{}" is required but not found in {}'.format(field_name, inputfile_path))
-    return Rig(file_data["name"], file_data, dry_run, settings=settings, output_dir=output_dir)
+    rig_dir = os.path.dirname(os.path.abspath(inputfile_path))
+    return Rig(
+        file_data["name"],
+        file_data,
+        dry_run,
+        run_uuid,
+        settings=settings,
+        output_dir=output_dir,
+        file_output=file_output,
+        rig_dir=rig_dir,
+    )
 
 
 class Rig:
@@ -36,12 +46,20 @@ class Rig:
     workdir = None
     start_time = None
 
-    def __init__(self, name, spec, dry_run, settings=None, output_dir=None):
+    def __init__(self, name, spec, dry_run, run_uuid, settings=None, output_dir=None, file_output=False, rig_dir=None):
         self.name = name
         self.rig_spec = spec
         self.dry_run = dry_run
+        self.run_uuid = run_uuid
         self.settings = settings or {}
         self.output_dir = output_dir or os.path.abspath(".")
+        self.file_output = file_output
+        self.rig_dir = rig_dir or os.path.abspath(".")
+        self.test_results = []
+        self.rocminfo_output = None
+        self.run_result = None
+        self.was_debug_run = False
+        self.debug_binaries = []
 
         # TODO derive data from rig_spec
 
@@ -92,15 +110,17 @@ class Rig:
             process.stdout.close()
             process.wait()
 
+        process.output = "\n".join(output_lines)
+
         if process.returncode != 0:
             logger.error(
                 "command '%s' failed with returncode %s, full output:\n%s",
                 " ".join(command),
                 process.returncode,
-                "\n".join(output_lines),
+                process.output,
             )
             if check:
-                raise subprocess.CalledProcessError(process.returncode, command, output="\n".join(output_lines))
+                raise subprocess.CalledProcessError(process.returncode, command, output=process.output)
 
         return process
 
@@ -113,6 +133,7 @@ class Rig:
             process = self._run_command(["rocminfo"], check=True)
             if process.returncode != 0:
                 raise Exception("rocminfo failed - returncode {}".format(process.returncode))
+            self.rocminfo_output = process.output
 
     def prepare(self):
         # check to make sure that tests package is installed
@@ -157,9 +178,24 @@ class Rig:
         logger.info("------------------------------------------------------------")
         logger.info("running command: '{}'".format(" ".join(run_command)))
 
+        test_start_time = datetime.now(timezone.utc)
         process = self._run_command(run_command)
+        test_end_time = datetime.now(timezone.utc)
 
-        if process.returncode == 0:
+        did_pass = process.returncode == 0
+        self.test_results.append(
+            {
+                "binary": binary_path,
+                "command": run_command,
+                "execution_state": "PASS" if did_pass else "FAIL",
+                "start_time": test_start_time,
+                "end_time": test_end_time,
+                "duration": test_end_time - test_start_time,
+                "return_code": process.returncode,
+            }
+        )
+
+        if did_pass:
             logger.info("result: PASS")
             return True
         else:
@@ -260,7 +296,7 @@ class Rig:
                 logger.warning("gdb failed for {} with return code {}".format(failed_binary, process.returncode))
 
     def execute(self, force_debug=False, disable_debug=False):
-        self.start_time = datetime.now()
+        self.start_time = datetime.now(timezone.utc)
         logger.info("Running test for {}".format(self.name))
 
         logger.info("================================================================================")
@@ -286,17 +322,26 @@ class Rig:
         if force_debug and not disable_debug:
             self._resolve_test_binaries()
             self.gather_debug_info(self.test_binaries)
+            self.was_debug_run = True
+            self.debug_binaries = list(self.test_binaries)
             run_result = {"passed": [], "failed": []}
         else:
             run_result = self.run_tests()
+        self.run_result = run_result
 
         logger.info("================================================================================")
         logger.info("run complete")
         logger.info("================================================================================")
 
-        runtime = datetime.now() - self.start_time
+        runtime = datetime.now(timezone.utc) - self.start_time
         logger.info("Rig run started at: {}".format(self.start_time.strftime("%Y-%m-%d %H:%M:%S")))
         logger.info("Rig run completed at: {}".format((self.start_time + runtime).strftime("%Y-%m-%d %H:%M:%S")))
         logger.info("Total runtime: {}".format(runtime))
 
+        from .summary import build_summary, write_summary
+
+        if self.file_output:
+            write_summary(build_summary(self), self.output_dir)
+
         return run_result
+

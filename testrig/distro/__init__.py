@@ -34,3 +34,18 @@ class BaseDistro(metaclass=ABCMeta):
     @abstractmethod
     def get_package_info(self, package_name):
         raise NotImplementedError
+
+    # TODO: implement for run summary output (see docs/output_format.md)
+    @abstractmethod
+    def get_distro_family(self):
+        raise NotImplementedError
+
+    # TODO: implement for run summary output (see docs/output_format.md)
+    @abstractmethod
+    def get_distro_release(self):
+        raise NotImplementedError
+
+    # TODO: implement for run summary output (see docs/output_format.md)
+    @abstractmethod
+    def is_inbox_kernel(self):
+        raise NotImplementedError

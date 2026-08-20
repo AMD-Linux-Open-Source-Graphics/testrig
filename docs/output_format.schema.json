@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/testrig/testrig/docs/output_format.schema.json",
+  "title": "testrig run summary",
+  "description": "Machine-readable summary produced by testrig after completing a run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "testrig_version",
+    "run_uuid",
+    "start_time",
+    "end_time",
+    "total_runtime",
+    "is_dry_run",
+    "runner_system_information",
+    "gpu_information",
+    "git_information",
+    "test_information",
+    "debug_run_information",
+    "testrig_options",
+    "overall_result"
+  ],
+  "$defs": {
+    "execution_state": {
+      "type": "string",
+      "description": "Result state enum. See docs/output_format.md for detailed semantics.",
+      "enum": ["PASS", "WARN", "FAIL", "SYSTEM_FAIL", "RUNNER_FAIL", "UNKNOWN"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp including a timezone offset (UTC by default)."
+    },
+    "duration": {
+      "type": "string",
+      "description": "ISO 8601 duration, e.g. PT4M12S."
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Semantic version of this output schema."
+    },
+    "testrig_version": {
+      "type": "string",
+      "description": "Version of testrig that produced this summary."
+    },
+    "run_uuid": {
+      "type": "string",
+      "format": "uuid",
+      "description": "RFC 9562 UUID version 7 identifying this run."
+    },
+    "start_time": { "$ref": "#/$defs/timestamp" },
+    "end_time": { "$ref": "#/$defs/timestamp" },
+    "total_runtime": { "$ref": "#/$defs/duration" },
+    "is_dry_run": {
+      "type": "boolean",
+      "description": "True when the run was a dry run and did not execute test binaries."
+    },
+    "runner_system_information": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kernel",
+        "installed_packages",
+        "distro_family",
+        "distro",
+        "distro_release",
+        "available_memory",
+        "cpu",
+        "cpu_arch",
+        "free_memory_at_run_start",
+        "user_account",
+        "user_account_groups",
+        "hostname",
+        "container_type"
+      ],
+      "properties": {
+        "kernel": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["is_inbox_kernel", "version"],
+          "properties": {
+            "is_inbox_kernel": {
+              "type": "boolean",
+              "description": "True if the running kernel is the distro-provided (inbox) kernel."
+            },
+            "version": { "type": "string" }
+          }
+        },
+        "installed_packages": {
+          "type": "object",
+          "description": "Map of installed system package name to version string.",
+          "additionalProperties": { "type": "string" }
+        },
+        "distro_family": { "type": "string" },
+        "distro": { "type": "string" },
+        "distro_release": { "type": "string" },
+        "available_memory": { "type": "string" },
+        "cpu": { "type": "string" },
+        "cpu_arch": { "type": "string" },
+        "free_memory_at_run_start": { "type": "string" },
+        "user_account": { "type": "string" },
+        "user_account_groups": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "hostname": { "type": "string" },
+        "container_type": {
+          "type": "string",
+          "enum": ["docker", "podman", "lxc", "none"],
+          "description": "Container system running the process at execution time, or \"none\" if not containerized."
+        }
+      }
+    },
+    "gpu_information": {
+      "type": "array",
+      "description": "List of GPUs detected on the runner system.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["isa", "marketing_name", "vendor_name", "firmware_version"],
+        "properties": {
+          "isa": { "type": "string" },
+          "marketing_name": { "type": "string" },
+          "vendor_name": { "type": "string" },
+          "firmware_version": { "type": "string" }
+        }
+      }
+    },
+    "git_information": {
+      "type": ["object", "null"],
+      "description": "Git metadata for the test source, or null when unavailable.",
+      "additionalProperties": false,
+      "required": ["repo_uri", "revision", "is_modified"],
+      "properties": {
+        "repo_uri": { "type": ["string", "null"] },
+        "revision": { "type": ["string", "null"] },
+        "is_modified": { "type": ["boolean", "null"] }
+      }
+    },
+    "test_information": {
+      "type": "array",
+      "description": "One entry per test binary executed during the run.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "binary",
+          "command",
+          "execution_state",
+          "start_time",
+          "end_time",
+          "duration",
+          "return_code"
+        ],
+        "properties": {
+          "binary": {
+            "type": "string",
+            "description": "Absolute path to the test binary."
+          },
+          "command": {
+            "type": "array",
+            "description": "Full argv used to invoke the binary, including any extra args.",
+            "items": { "type": "string" }
+          },
+          "execution_state": { "$ref": "#/$defs/execution_state" },
+          "start_time": { "$ref": "#/$defs/timestamp" },
+          "end_time": { "$ref": "#/$defs/timestamp" },
+          "duration": { "$ref": "#/$defs/duration" },
+          "return_code": {
+            "type": ["integer", "null"],
+            "description": "Process exit code, or null if the binary was not executed."
+          }
+        }
+      }
+    },
+    "debug_run_information": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["was_debug_run", "binaries"],
+      "properties": {
+        "was_debug_run": {
+          "type": "boolean",
+          "description": "True if a debug (gdb) run was performed."
+        },
+        "binaries": {
+          "type": "array",
+          "description": "Binaries for which a debug run was performed.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "testrig_options": {
+      "type": "object",
+      "description": "testrig settings in effect at runtime.",
+      "additionalProperties": true
+    },
+    "overall_result": { "$ref": "#/$defs/execution_state" }
+  }
+}

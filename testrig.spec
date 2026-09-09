@@ -5,7 +5,7 @@
 
 Name:          testrig
 Version:       0.0.8
-Release:       1%{?dist}
+Release:       2%{?dist}
 
 Summary:       tool for running tests in a repeatable way
 License:       MIT
@@ -15,6 +15,7 @@ BuildArch:     noarch
 URL:           https://github.com/AMD-Linux-Open-Source-Graphics/testrig
 Source0:        %{url}/archive/%{version}.tar.gz#/testrig-%{version}.tar.gz
 
+Requires:      git
 
 BuildRequires: python3-devel
 BuildRequires: python3-pytest
@@ -58,6 +59,9 @@ install -pm 644 support/gdb_traceback_on_stop.py %{buildroot}%{_datadir}/%{name}
 
 
 %changelog
+* Mon Aug 24 2026 Tim Flink <tflink@fedoraproject.org> - 0.0.8-2
+- add git as a dependency for summary generation
+
 * Thu Aug 20 2026 Tim Flink <tflink@fedoraproject.org> - 0.0.8-1
 - new upstream release 0.0.8
   * add options to log output to file instead of just stdout

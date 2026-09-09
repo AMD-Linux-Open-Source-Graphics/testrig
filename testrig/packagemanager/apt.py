@@ -2,15 +2,31 @@
 #
 # SPDX-License-Identifier: MIT
 
+import glob
 import logging
+import os
 import subprocess
 
 from testrig.packagemanager import PackageManager
 
 logger = logging.getLogger(__name__)
 
+# apt stores downloaded package indices here; only "lock" and "partial/" exist
+# until an "apt-get update" has populated it.
+APT_LISTS_DIR = "/var/lib/apt/lists"
+
 
 class AptPackageManager(PackageManager):
+    def _has_metadata(self):
+        # presence of any "*_Packages*" index means metadata has been fetched
+        return bool(glob.glob(os.path.join(APT_LISTS_DIR, "*_Packages*")))
+
+    def _update_metadata(self):
+        command = ["apt-get", "update"]
+        returncode, _ = self._run_command(command)
+        if returncode != 0:
+            raise Exception("'apt-get update' failed while refreshing package metadata")
+
     def is_installed(self, package_name):
         command = ["dpkg-query", "-W", "-f=${Version}", package_name]
         returncode, version = self._run_command(command)
@@ -20,6 +36,10 @@ class AptPackageManager(PackageManager):
         return version
 
     def install_packages(self, package_names):
+        if not self._has_metadata():
+            logger.info("no apt package metadata found, running 'apt-get update'")
+            self._update_metadata()
+
         command = ["apt-get", "install", "-y"]
         command.extend(package_names)
         try:

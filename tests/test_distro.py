@@ -476,8 +476,9 @@ class TestAptIsInstalled:
 
 
 class TestAptInstallPackages:
+    @patch("testrig.packagemanager.apt.AptPackageManager._has_metadata", return_value=True)
     @patch("testrig.packagemanager.apt.subprocess.run")
-    def test_successful_install(self, mock_subproc, caplog):
+    def test_successful_install(self, mock_subproc, mock_has_metadata, caplog):
         mock_subproc.return_value = MagicMock(stdout=b"Installing packages...", returncode=0)
         pm = AptPackageManager()
 

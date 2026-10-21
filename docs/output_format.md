@@ -9,6 +9,8 @@ The summary will be in JSON for the following reasons
   1. While testrig uses TOML for configuration files, python only has TOML parsing in the stdlib and one of the design philosophies of testrig is to minimize external dependencies
   2. while not the best for human read-ability, JSON is well supported among languages and easily parsable by pretty much anything
 
+When GPU monitoring and file output are both enabled, testrig additionally streams the full GPU usage time-series to `testrig_gpu_samples.jsonl` in the run output directory. That file is [JSON Lines](https://jsonlines.org/): one JSON object per line, written and flushed as each sample is collected so that samples survive even if the run is killed mid-execution. Each line has the shape `{"timestamp": ..., "binary": ..., "gpus": [{"gpu": 0, "utilization_pct": ..., "vram_used_mb": ..., "temperature_c": ..., "power_w": ...}]}`. Aggregated per-binary statistics are always recorded in the summary's `test_information[].gpu_monitoring` object.
+
 ## Output schema
 
 The detailed schema is stored in [output_format.schema.json](output_format.schema.json)
@@ -158,7 +160,23 @@ it is published.
       "start_time": "2026-08-19T17:01:00+00:00",
       "end_time": "2026-08-19T17:01:30+00:00",
       "duration": "PT30S",
-      "return_code": 0
+      "return_code": 0,
+      "gpu_monitoring": {
+        "status": "ok",
+        "error": null,
+        "samples_collected": 30,
+        "interval_seconds": 1.0,
+        "gpus": [
+          {
+            "gpu": 0,
+            "utilization_pct_peak": 98,
+            "utilization_pct_avg": 71.5,
+            "vram_used_mb_peak": 8192,
+            "temperature_c_peak": 71,
+            "power_w_peak": 180
+          }
+        ]
+      }
     },
     {
       "binary": "/usr/lib/rocm-tests/test_bar",
@@ -178,7 +196,9 @@ it is published.
     "disable_debug": false,
     "ROCR_VISIBLE_DEVICES": "",
     "gdb_pyfile_dir": "/usr/share/testrig",
-    "enable_file_output": false
+    "enable_file_output": false,
+    "enable_gpu_monitoring": true,
+    "gpu_monitoring_interval": 1.0
   },
   "overall_result": "FAIL"
 }

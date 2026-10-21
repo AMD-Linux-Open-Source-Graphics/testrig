@@ -25,6 +25,8 @@ class TestLoadSettings:
         assert settings["gdb_pyfile_dir"] == "/usr/share/testrig"
         assert settings["enable_file_output"] is False
         assert settings["output_dir"] == "./testrig-logs"
+        assert settings["enable_gpu_monitoring"] is False
+        assert settings["gpu_monitoring_interval"] == 1.0
 
     def test_does_not_mutate_default_settings(self, tmp_path):
         path = write_toml(tmp_path / "settings.toml", "disable_debug = true\n")

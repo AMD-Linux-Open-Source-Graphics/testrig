@@ -24,6 +24,10 @@ DEFAULT_SETTINGS = {
     "enable_file_output": False,
     # base directory for output files when file output is enabled
     "output_dir": "./testrig-logs",
+    # sample GPU usage (via amd-smi) while each test binary runs
+    "enable_gpu_monitoring": False,
+    # seconds between amd-smi samples when GPU monitoring is enabled
+    "gpu_monitoring_interval": 1.0,
 }
 
 

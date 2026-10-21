@@ -180,6 +180,58 @@
           "return_code": {
             "type": ["integer", "null"],
             "description": "Process exit code, or null if the binary was not executed."
+          },
+          "gpu_monitoring": {
+            "type": "object",
+            "description": "Aggregated GPU usage sampled (via amd-smi) while this binary ran. Present only when GPU monitoring was enabled.",
+            "additionalProperties": false,
+            "required": ["status", "error", "samples_collected", "interval_seconds", "gpus"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["ok", "unavailable", "degraded"],
+                "description": "\"ok\" if monitoring worked; \"unavailable\" if amd-smi was missing or produced no samples; \"degraded\" if some samples failed."
+              },
+              "error": {
+                "type": ["string", "null"],
+                "description": "Human-readable reason when status is not \"ok\", otherwise null."
+              },
+              "samples_collected": {
+                "type": "integer",
+                "description": "Number of amd-smi samples successfully collected during the run."
+              },
+              "interval_seconds": {
+                "type": "number",
+                "description": "Configured seconds between amd-smi samples."
+              },
+              "gpus": {
+                "type": "array",
+                "description": "Per-GPU aggregated metrics. A null metric means it was never available.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "gpu",
+                    "utilization_pct_peak",
+                    "utilization_pct_avg",
+                    "vram_used_mb_peak",
+                    "temperature_c_peak",
+                    "power_w_peak"
+                  ],
+                  "properties": {
+                    "gpu": {
+                      "type": ["integer", "null"],
+                      "description": "GPU index as reported by amd-smi."
+                    },
+                    "utilization_pct_peak": { "type": ["number", "null"] },
+                    "utilization_pct_avg": { "type": ["number", "null"] },
+                    "vram_used_mb_peak": { "type": ["number", "null"] },
+                    "temperature_c_peak": { "type": ["number", "null"] },
+                    "power_w_peak": { "type": ["number", "null"] }
+                  }
+                }
+              }
+            }
           }
         }
       }

@@ -175,6 +175,21 @@ def _overall_result(rig):
     return "PASS"
 
 
+def _build_test_information_entry(test_result):
+    entry = {
+        "binary": test_result["binary"],
+        "command": test_result["command"],
+        "execution_state": test_result["execution_state"],
+        "start_time": _iso_timestamp(test_result["start_time"]),
+        "end_time": _iso_timestamp(test_result["end_time"]),
+        "duration": _iso_duration(test_result["duration"]),
+        "return_code": test_result["return_code"],
+    }
+    if "gpu_monitoring" in test_result:
+        entry["gpu_monitoring"] = test_result["gpu_monitoring"]
+    return entry
+
+
 def build_summary(rig):
     now = datetime.now(timezone.utc)
     start_time = rig.start_time or now
@@ -188,18 +203,7 @@ def build_summary(rig):
         **_gather_system_info(),
     }
 
-    test_information = [
-        {
-            "binary": test_result["binary"],
-            "command": test_result["command"],
-            "execution_state": test_result["execution_state"],
-            "start_time": _iso_timestamp(test_result["start_time"]),
-            "end_time": _iso_timestamp(test_result["end_time"]),
-            "duration": _iso_duration(test_result["duration"]),
-            "return_code": test_result["return_code"],
-        }
-        for test_result in rig.test_results
-    ]
+    test_information = [_build_test_information_entry(test_result) for test_result in rig.test_results]
 
     return {
         "schema_version": SCHEMA_VERSION,

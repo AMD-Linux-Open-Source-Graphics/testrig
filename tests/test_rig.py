@@ -291,6 +291,145 @@ class TestExecuteBinary:
             bufsize=1,
         )
 
+    @patch("testrig.rig.subprocess.Popen")
+    def test_no_gpu_monitoring_key_when_disabled(self, mock_subproc):
+        make_popen_mock(mock_subproc, returncode=0)
+        run = make_rig()
+
+        run._execute_binary("/fake/bin/test_a")
+
+        assert "gpu_monitoring" not in run.test_results[0]
+
+    @patch("testrig.rig.GpuMonitor")
+    @patch("testrig.rig.subprocess.Popen")
+    def test_records_gpu_monitoring_when_enabled(self, mock_subproc, mock_monitor):
+        make_popen_mock(mock_subproc, returncode=0)
+        aggregate = {
+            "status": "ok",
+            "error": None,
+            "samples_collected": 3,
+            "interval_seconds": 1.0,
+            "gpus": [],
+        }
+        instance = mock_monitor.return_value
+        instance.__enter__.return_value = instance
+        instance.__exit__.return_value = False
+        instance.aggregate.return_value = aggregate
+        run = make_rig()
+        run.gpu_monitoring = True
+
+        run._execute_binary("/fake/bin/test_a", sample_sink="SINK")
+
+        assert run.test_results[0]["gpu_monitoring"] == aggregate
+        mock_monitor.assert_called_once_with(1.0, sample_sink="SINK", binary="/fake/bin/test_a")
+
+    @patch("testrig.gpumonitor.shutil.which", return_value=None)
+    @patch("testrig.rig.subprocess.Popen")
+    def test_survives_unavailable_amd_smi(self, mock_subproc, mock_which):
+        make_popen_mock(mock_subproc, returncode=0)
+        run = make_rig()
+        run.gpu_monitoring = True
+
+        result = run._execute_binary("/fake/bin/test_a")
+
+        assert result is True
+        assert run.test_results[0]["gpu_monitoring"]["status"] == "unavailable"
+
+
+# ==========================================================================
+# Group D2: GPU sample sink (no empty file left behind)
+# ==========================================================================
+
+
+class TestGpuSampleSink:
+    def test_lazy_sink_does_not_create_file_until_write(self, tmp_path):
+        from testrig.rig import _LazyJsonlSink
+
+        path = tmp_path / "samples.jsonl"
+        sink = _LazyJsonlSink(str(path))
+        sink.flush()
+        sink.close()
+
+        assert not path.exists()
+
+    def test_lazy_sink_creates_file_on_write(self, tmp_path):
+        from testrig.rig import _LazyJsonlSink
+
+        path = tmp_path / "samples.jsonl"
+        sink = _LazyJsonlSink(str(path))
+        sink.write('{"a": 1}\n')
+        sink.flush()
+        sink.close()
+
+        assert path.read_text() == '{"a": 1}\n'
+
+    @patch("testrig.gpumonitor.shutil.which", return_value=None)
+    @patch("testrig.rig.subprocess.Popen")
+    def test_run_tests_leaves_no_file_when_amd_smi_unavailable(self, mock_subproc, mock_which, tmp_path):
+        make_popen_mock(mock_subproc, returncode=0)
+        spec = {"name": "t", "ubuntu": {"test_binary_path": "/bin", "test_binaries": ["a"]}}
+        run = Rig(
+            "t", spec, False, TEST_UUID, output_dir=str(tmp_path), file_output=True, gpu_monitoring=True
+        )
+        run.distro = make_mock_distro("ubuntu")
+        run.binary_path = "/bin"
+
+        run.run_tests()
+
+        assert not (tmp_path / "testrig_gpu_samples.jsonl").exists()
+        assert run.test_results[0]["gpu_monitoring"]["status"] == "unavailable"
+
+
+# ==========================================================================
+# Group D3: GPU monitoring logging
+# ==========================================================================
+
+
+class TestGpuMonitoringLogging:
+    def test_announces_enabled_and_output_path(self, tmp_path, caplog):
+        run = Rig(
+            "t", {"name": "t"}, False, TEST_UUID, output_dir=str(tmp_path), file_output=True, gpu_monitoring=True
+        )
+
+        with caplog.at_level(logging.INFO):
+            run._log_gpu_monitoring_config()
+
+        assert "ENABLED" in caplog.text
+        assert str(tmp_path / "testrig_gpu_samples.jsonl") in caplog.text
+
+    def test_announces_disabled(self, caplog):
+        run = make_rig()
+
+        with caplog.at_level(logging.INFO):
+            run._log_gpu_monitoring_config()
+
+        assert "GPU monitoring: disabled" in caplog.text
+
+    def test_announces_no_file_when_file_output_off(self, caplog):
+        run = Rig("t", {"name": "t"}, False, TEST_UUID, gpu_monitoring=True, file_output=False)
+
+        with caplog.at_level(logging.INFO):
+            run._log_gpu_monitoring_config()
+
+        assert "no time-series file" in caplog.text
+
+    @patch("testrig.gpumonitor.shutil.which", return_value=None)
+    @patch("testrig.rig.subprocess.Popen")
+    def test_unavailable_is_logged_at_warning_visible_at_info(self, mock_subproc, mock_which, caplog):
+        make_popen_mock(mock_subproc, returncode=0)
+        run = make_rig()
+        run.gpu_monitoring = True
+
+        with caplog.at_level(logging.INFO):
+            run._execute_binary("/fake/bin/test_a")
+
+        monitoring_warnings = [
+            record
+            for record in caplog.records
+            if record.levelno >= logging.WARNING and "GPU monitoring" in record.getMessage()
+        ]
+        assert monitoring_warnings
+
 
 class TestExecuteBinaryMissing:
     @patch("testrig.rig.subprocess.Popen")

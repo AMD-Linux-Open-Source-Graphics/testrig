@@ -10,14 +10,47 @@ from datetime import datetime, timezone
 
 import tomllib
 
+from .gpumonitor import GpuMonitor
 from .util import get_distro
 
 logger = logging.getLogger("testrig.rig")
 
 REQUIRED_FIELDS = ["name"]
+GPU_SAMPLES_FILENAME = "testrig_gpu_samples.jsonl"
 
 
-def parse_rig(inputfile_path, run_uuid, dry_run=False, settings=None, output_dir=None, file_output=False):
+class _LazyJsonlSink:
+    """Sample sink that creates the file on first write, so no empty file is left behind."""
+
+    def __init__(self, path):
+        self._path = path
+        self._handle = None
+
+    def write(self, text):
+        if self._handle is None:
+            self._handle = open(self._path, "a")
+        self._handle.write(text)
+
+    def flush(self):
+        if self._handle is not None:
+            self._handle.flush()
+
+    def close(self):
+        if self._handle is not None:
+            self._handle.close()
+
+
+
+def parse_rig(
+    inputfile_path,
+    run_uuid,
+    dry_run=False,
+    settings=None,
+    output_dir=None,
+    file_output=False,
+    gpu_monitoring=False,
+    gpu_monitoring_interval=1.0,
+):
     file_data = None
 
     with open(inputfile_path, "rb") as input_file:
@@ -36,6 +69,8 @@ def parse_rig(inputfile_path, run_uuid, dry_run=False, settings=None, output_dir
         settings=settings,
         output_dir=output_dir,
         file_output=file_output,
+        gpu_monitoring=gpu_monitoring,
+        gpu_monitoring_interval=gpu_monitoring_interval,
         rig_dir=rig_dir,
         inputfile_path=abs_inputfile_path,
     )
@@ -57,6 +92,8 @@ class Rig:
         settings=None,
         output_dir=None,
         file_output=False,
+        gpu_monitoring=False,
+        gpu_monitoring_interval=1.0,
         rig_dir=None,
         inputfile_path=None,
     ):
@@ -67,6 +104,8 @@ class Rig:
         self.settings = settings or {}
         self.output_dir = output_dir or os.path.abspath(".")
         self.file_output = file_output
+        self.gpu_monitoring = gpu_monitoring
+        self.gpu_monitoring_interval = gpu_monitoring_interval
         self.rig_dir = rig_dir or os.path.abspath(".")
         self.inputfile_path = inputfile_path
         self.test_results = []
@@ -182,7 +221,7 @@ class Rig:
             else:
                 raise Exception(f'required test package "{required_package}" is not installed.')
 
-    def _execute_binary(self, binary_path):
+    def _execute_binary(self, binary_path, sample_sink=None):
         run_command = [binary_path]
         if "extra_args" in self.rig_spec:
             run_command.extend(self.rig_spec["extra_args"])
@@ -216,22 +255,44 @@ class Rig:
 
         logger.info("running command: '{}'".format(" ".join(run_command)))
 
+        gpu_monitoring = None
         test_start_time = datetime.now(timezone.utc)
-        process = self._run_command(run_command)
+        if self.gpu_monitoring and not self.dry_run:
+            with GpuMonitor(
+                self.gpu_monitoring_interval, sample_sink=sample_sink, binary=binary_path
+            ) as monitor:
+                process = self._run_command(run_command)
+            gpu_monitoring = monitor.aggregate()
+            if gpu_monitoring["status"] != "ok":
+                logger.warning(
+                    "GPU monitoring %s for %s: %s",
+                    gpu_monitoring["status"],
+                    os.path.basename(binary_path),
+                    gpu_monitoring["error"],
+                )
+            else:
+                logger.info(
+                    "GPU monitoring: collected %s sample(s) for %s",
+                    gpu_monitoring["samples_collected"],
+                    os.path.basename(binary_path),
+                )
+        else:
+            process = self._run_command(run_command)
         test_end_time = datetime.now(timezone.utc)
 
         did_pass = process.returncode == 0
-        self.test_results.append(
-            {
-                "binary": binary_path,
-                "command": run_command,
-                "execution_state": "PASS" if did_pass else "FAIL",
-                "start_time": test_start_time,
-                "end_time": test_end_time,
-                "duration": test_end_time - test_start_time,
-                "return_code": process.returncode,
-            }
-        )
+        test_result = {
+            "binary": binary_path,
+            "command": run_command,
+            "execution_state": "PASS" if did_pass else "FAIL",
+            "start_time": test_start_time,
+            "end_time": test_end_time,
+            "duration": test_end_time - test_start_time,
+            "return_code": process.returncode,
+        }
+        if gpu_monitoring is not None:
+            test_result["gpu_monitoring"] = gpu_monitoring
+        self.test_results.append(test_result)
 
         if did_pass:
             logger.info("result: PASS")
@@ -252,6 +313,37 @@ class Rig:
             os.path.join(self.binary_path, binary_name) for binary_name in distro_spec["test_binaries"]
         ]
 
+    def _open_gpu_sample_sink(self):
+        if self.dry_run or not (self.gpu_monitoring and self.file_output):
+            return None
+        sample_path = os.path.join(self.output_dir, GPU_SAMPLES_FILENAME)
+        return _LazyJsonlSink(sample_path)
+
+    def _log_gpu_monitoring_config(self):
+        if not self.gpu_monitoring:
+            logger.info("GPU monitoring: disabled")
+            return
+        logger.info(
+            "GPU monitoring: ENABLED (sampling via amd-smi every %ss)", self.gpu_monitoring_interval
+        )
+        if self.dry_run:
+            logger.info("GPU monitoring: skipped for this dry run")
+        elif self.file_output:
+            sample_path = os.path.join(self.output_dir, GPU_SAMPLES_FILENAME)
+            logger.info("GPU monitoring: sample time-series will be written to %s", sample_path)
+        else:
+            logger.info(
+                "GPU monitoring: no time-series file (file output disabled); "
+                "aggregated stats still recorded in the run summary"
+            )
+
+    def _warn_if_monitoring_unusable(self):
+        statuses = [
+            result["gpu_monitoring"]["status"] for result in self.test_results if "gpu_monitoring" in result
+        ]
+        if statuses and all(status != "ok" for status in statuses):
+            logger.warning("GPU monitoring was enabled but produced no usable data for any test binary")
+
     def run_tests(self):
         if self.distro is None:
             self._setup()
@@ -259,14 +351,22 @@ class Rig:
         if self.test_binaries is None:
             self._resolve_test_binaries()
 
+        sample_sink = self._open_gpu_sample_sink()
         failed_tests = []
         passed_tests = []
-        for test_binary in self.test_binaries:
-            did_pass = self._execute_binary(test_binary)
-            if did_pass:
-                passed_tests.append(test_binary)
-            else:
-                failed_tests.append(test_binary)
+        try:
+            for test_binary in self.test_binaries:
+                did_pass = self._execute_binary(test_binary, sample_sink=sample_sink)
+                if did_pass:
+                    passed_tests.append(test_binary)
+                else:
+                    failed_tests.append(test_binary)
+        finally:
+            if sample_sink is not None:
+                sample_sink.close()
+
+        if self.gpu_monitoring and not self.dry_run:
+            self._warn_if_monitoring_unusable()
 
         logger.info("================================================================================")
         logger.info("RESULTS")
@@ -334,6 +434,7 @@ class Rig:
     def execute(self, force_debug=False, disable_debug=False):
         self.start_time = datetime.now(timezone.utc)
         logger.info(f"Running test for {self.name}")
+        self._log_gpu_monitoring_config()
 
         logger.info("================================================================================")
         logger.info("running check")

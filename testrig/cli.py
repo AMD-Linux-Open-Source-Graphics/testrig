@@ -44,8 +44,15 @@ logger = logging.getLogger("testrig")
     help="Enable/disable writing output files to disk. Overrides the enable_file_output setting; "
     "if unset, the setting (default: disabled) is used",
 )
+@click.option(
+    "--gpu-monitoring/--no-gpu-monitoring",
+    "gpu_monitoring",
+    default=None,
+    help="Enable/disable sampling GPU usage (via amd-smi) while tests run. Overrides the "
+    "enable_gpu_monitoring setting; if unset, the setting (default: disabled) is used",
+)
 @click.pass_context
-def cli(ctx, run_directory, filename, debug, no_root, dry_run, verbose, output_dir, file_output):
+def cli(ctx, run_directory, filename, debug, no_root, dry_run, verbose, output_dir, file_output, gpu_monitoring):
     logging.basicConfig(
         format="%(levelname)s: %(message)s",
         level=logging.DEBUG if verbose else logging.INFO,
@@ -62,6 +69,10 @@ def cli(ctx, run_directory, filename, debug, no_root, dry_run, verbose, output_d
     if file_output is None:
         file_output = ctx.obj["settings"]["enable_file_output"]
     ctx.obj["file_output"] = file_output
+    if gpu_monitoring is None:
+        gpu_monitoring = ctx.obj["settings"]["enable_gpu_monitoring"]
+    ctx.obj["gpu_monitoring"] = gpu_monitoring
+    ctx.obj["gpu_monitoring_interval"] = ctx.obj["settings"]["gpu_monitoring_interval"]
 
 
 def resolve_input_path(ctx):
@@ -121,6 +132,8 @@ def run_test(ctx, no_debug):
         settings=ctx.obj["settings"],
         output_dir=run_output_dir,
         file_output=ctx.obj["file_output"],
+        gpu_monitoring=ctx.obj["gpu_monitoring"],
+        gpu_monitoring_interval=ctx.obj["gpu_monitoring_interval"],
     )
     rig.no_root = ctx.obj["no_root"]
 

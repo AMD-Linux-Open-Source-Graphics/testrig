@@ -84,6 +84,19 @@ output_dir
     Defaults to ``./testrig-logs``. Overridden by the ``--output-dir``
     command-line option when given.
 
+enable_gpu_monitoring
+    Sample GPU usage (utilization, VRAM, temperature, power) via ``amd-smi``
+    while each test binary runs. Aggregated per-binary statistics are recorded
+    in the run summary. When ``enable_file_output`` is also set, the full
+    time-series is streamed to ``testrig_gpu_samples.jsonl`` (one JSON object
+    per line) in the run output directory. Monitoring is best-effort: if
+    ``amd-smi`` is missing or fails, the test run still completes and the
+    failure is reported in the summary. Defaults to ``false``.
+
+gpu_monitoring_interval
+    Seconds between ``amd-smi`` samples when GPU monitoring is enabled.
+    Defaults to ``1.0``.
+
 Examples
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -124,6 +137,11 @@ Options
     Enable or disable writing output files to disk for this run. Overrides
     the ``enable_file_output`` setting; if neither flag is given, the setting
     (default: disabled) is used.
+
+--gpu-monitoring / --no-gpu-monitoring
+    Enable or disable sampling GPU usage (via ``amd-smi``) while tests run.
+    Overrides the ``enable_gpu_monitoring`` setting; if neither flag is given,
+    the setting (default: disabled) is used.
 
 run
 -----

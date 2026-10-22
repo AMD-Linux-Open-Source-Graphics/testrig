@@ -5,7 +5,6 @@
 import glob
 import logging
 import os
-import subprocess
 
 from testrig.packagemanager import PackageManager
 
@@ -23,13 +22,17 @@ class AptPackageManager(PackageManager):
 
     def _update_metadata(self):
         command = ["apt-get", "update"]
-        returncode, _ = self._run_command(command)
+        returncode, stdout, stderr = self._run_command(command)
         if returncode != 0:
+            logger.error(
+                "'apt-get update' failed while refreshing package metadata\n%s",
+                self._format_command_output(stdout, stderr),
+            )
             raise Exception("'apt-get update' failed while refreshing package metadata")
 
     def is_installed(self, package_name):
         command = ["dpkg-query", "-W", "-f=${Version}", package_name]
-        returncode, version = self._run_command(command)
+        returncode, version, _ = self._run_command(command)
         if returncode != 0:
             return None
 
@@ -42,11 +45,14 @@ class AptPackageManager(PackageManager):
 
         command = ["apt-get", "install", "-y"]
         command.extend(package_names)
-        try:
-            self._run_command(command)
-        except subprocess.CalledProcessError:
-            logger.error("installation of packages ({}) failed".format(" ".join(package_names)))
-            raise
+        returncode, stdout, stderr = self._run_command(command)
+        if returncode != 0:
+            logger.error(
+                "installation of packages (%s) failed\n%s",
+                " ".join(package_names),
+                self._format_command_output(stdout, stderr),
+            )
+            raise Exception("installation of packages ({}) failed".format(" ".join(package_names)))
 
         logger.info("packages installed '{}".format(" ".join(package_names)))
 
@@ -58,8 +64,12 @@ class AptPackageManager(PackageManager):
 
     def get_installed_packages(self):
         command = ["dpkg-query", "-W", "-f=${Package}\t${Version}\n"]
-        returncode, output = self._run_command(command)
+        returncode, output, stderr = self._run_command(command)
         if returncode != 0:
+            logger.warning(
+                "'dpkg-query' failed while listing installed packages\n%s",
+                self._format_command_output(output, stderr),
+            )
             return {}
 
         packages = {}

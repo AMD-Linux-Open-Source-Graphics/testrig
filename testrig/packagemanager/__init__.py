@@ -19,7 +19,21 @@ class PackageManager(metaclass=ABCMeta):
 
     def _run_command(self, command):
         process = subprocess.run(command, check=False, capture_output=True)
-        return process.returncode, process.stdout.decode("utf-8")
+        return (
+            process.returncode,
+            process.stdout.decode("utf-8"),
+            process.stderr.decode("utf-8"),
+        )
+
+    @staticmethod
+    def _format_command_output(stdout, stderr):
+        # both streams matter: package managers split errors across stdout/stderr
+        parts = []
+        if stdout.strip():
+            parts.append(f"stdout:\n{stdout.strip()}")
+        if stderr.strip():
+            parts.append(f"stderr:\n{stderr.strip()}")
+        return "\n".join(parts)
 
     @abstractmethod
     def is_installed(self, package_name):

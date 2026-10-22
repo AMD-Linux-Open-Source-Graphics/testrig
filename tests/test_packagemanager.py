@@ -5,6 +5,7 @@
 """Tests for testrig.packagemanager.dnf and testrig.packagemanager.apt
 get_installed_packages() implementations."""
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,7 +19,7 @@ from testrig.packagemanager.dnf import DnfPackageManager
 
 
 class TestDnfGetInstalledPackages:
-    @patch("testrig.packagemanager.dnf.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_parses_name_and_version(self, mock_subproc):
         mock_subproc.return_value = MagicMock(stdout=b"rocm-tests\t6.2.0-1\ngdb\t14.2-1\n", returncode=0)
         pm = DnfPackageManager()
@@ -27,7 +28,7 @@ class TestDnfGetInstalledPackages:
 
         assert result == {"rocm-tests": "6.2.0-1", "gdb": "14.2-1"}
 
-    @patch("testrig.packagemanager.dnf.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_includes_epoch_when_set(self, mock_subproc):
         mock_subproc.return_value = MagicMock(stdout=b"somepkg\t2:1.0-3\n", returncode=0)
         pm = DnfPackageManager()
@@ -36,7 +37,7 @@ class TestDnfGetInstalledPackages:
 
         assert result == {"somepkg": "2:1.0-3"}
 
-    @patch("testrig.packagemanager.dnf.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_uses_rpm_qa_with_name_version_release_queryformat(self, mock_subproc):
         mock_subproc.return_value = MagicMock(stdout=b"", returncode=0)
         pm = DnfPackageManager()
@@ -46,7 +47,7 @@ class TestDnfGetInstalledPackages:
         args = mock_subproc.call_args[0][0]
         assert args[:2] == ["rpm", "-qa"]
 
-    @patch("testrig.packagemanager.dnf.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_queryformat_conditionally_includes_epoch(self, mock_subproc):
         mock_subproc.return_value = MagicMock(stdout=b"", returncode=0)
         pm = DnfPackageManager()
@@ -56,14 +57,17 @@ class TestDnfGetInstalledPackages:
         queryformat = mock_subproc.call_args[0][0][3]
         assert "EPOCH" in queryformat
 
-    @patch("testrig.packagemanager.dnf.subprocess.run")
-    def test_nonzero_returncode_returns_empty_dict(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(stdout=b"", returncode=1)
+    @patch("testrig.packagemanager.subprocess.run")
+    def test_nonzero_returncode_returns_empty_dict(self, mock_subproc, caplog):
+        mock_subproc.return_value = MagicMock(stdout=b"", stderr=b"rpm: database error", returncode=1)
         pm = DnfPackageManager()
 
-        assert pm.get_installed_packages() == {}
+        with caplog.at_level(logging.WARNING):
+            assert pm.get_installed_packages() == {}
 
-    @patch("testrig.packagemanager.dnf.subprocess.run")
+        assert "rpm: database error" in caplog.text
+
+    @patch("testrig.packagemanager.subprocess.run")
     def test_ignores_blank_lines(self, mock_subproc):
         mock_subproc.return_value = MagicMock(stdout=b"pkg-a\t1.0\n\n", returncode=0)
         pm = DnfPackageManager()
@@ -72,12 +76,51 @@ class TestDnfGetInstalledPackages:
 
 
 # ==========================================================================
+# DnfPackageManager.install_packages()
+# ==========================================================================
+
+
+class TestDnfInstallPackages:
+    @patch("testrig.packagemanager.subprocess.run")
+    def test_successful_install_logs_success(self, mock_subproc, caplog):
+        mock_subproc.return_value = MagicMock(stdout=b"Complete!", stderr=b"", returncode=0)
+        pm = DnfPackageManager()
+
+        with caplog.at_level(logging.INFO):
+            pm.install_packages(["gdb"])
+
+        mock_subproc.assert_called_once_with(
+            ["dnf", "install", "-y", "gdb"],
+            check=False,
+            capture_output=True,
+        )
+        assert "packages installed 'gdb" in caplog.text
+
+    @patch("testrig.packagemanager.subprocess.run")
+    def test_failed_install_logs_both_streams_and_raises(self, mock_subproc, caplog):
+        """A non-zero return code from 'dnf install' is logged with both stdout
+        and stderr, then raised so the caller sees the failure."""
+        mock_subproc.return_value = MagicMock(
+            stdout=b"Last metadata expiration check...",
+            stderr=b"Error: Unable to find a match: gdb",
+            returncode=1,
+        )
+        pm = DnfPackageManager()
+
+        with caplog.at_level(logging.ERROR), pytest.raises(Exception, match="installation of packages"):
+            pm.install_packages(["gdb"])
+
+        assert "Last metadata expiration check..." in caplog.text
+        assert "Error: Unable to find a match: gdb" in caplog.text
+
+
+# ==========================================================================
 # AptPackageManager.get_installed_packages()
 # ==========================================================================
 
 
 class TestAptGetInstalledPackages:
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_parses_name_and_version(self, mock_subproc):
         mock_subproc.return_value = MagicMock(stdout=b"gdb\t14.2-1\nmypkg\t1.2.3-1ubuntu1\n", returncode=0)
         pm = AptPackageManager()
@@ -86,7 +129,7 @@ class TestAptGetInstalledPackages:
 
         assert result == {"gdb": "14.2-1", "mypkg": "1.2.3-1ubuntu1"}
 
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_uses_dpkg_query_w(self, mock_subproc):
         mock_subproc.return_value = MagicMock(stdout=b"", returncode=0)
         pm = AptPackageManager()
@@ -96,12 +139,15 @@ class TestAptGetInstalledPackages:
         args = mock_subproc.call_args[0][0]
         assert args[:2] == ["dpkg-query", "-W"]
 
-    @patch("testrig.packagemanager.apt.subprocess.run")
-    def test_nonzero_returncode_returns_empty_dict(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(stdout=b"", returncode=1)
+    @patch("testrig.packagemanager.subprocess.run")
+    def test_nonzero_returncode_returns_empty_dict(self, mock_subproc, caplog):
+        mock_subproc.return_value = MagicMock(stdout=b"", stderr=b"dpkg-query: error", returncode=1)
         pm = AptPackageManager()
 
-        assert pm.get_installed_packages() == {}
+        with caplog.at_level(logging.WARNING):
+            assert pm.get_installed_packages() == {}
+
+        assert "dpkg-query: error" in caplog.text
 
 
 # ==========================================================================
@@ -135,7 +181,7 @@ class TestAptHasMetadata:
 
 
 class TestAptInstallPackagesMetadata:
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     @patch.object(AptPackageManager, "_has_metadata", return_value=False)
     def test_runs_apt_get_update_when_metadata_missing(self, mock_has_metadata, mock_subproc):
         mock_subproc.return_value = MagicMock(stdout=b"", returncode=0)
@@ -146,7 +192,7 @@ class TestAptInstallPackagesMetadata:
         commands = [call[0][0] for call in mock_subproc.call_args_list]
         assert ["apt-get", "update"] in commands
 
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     @patch.object(AptPackageManager, "_has_metadata", return_value=True)
     def test_skips_apt_get_update_when_metadata_present(self, mock_has_metadata, mock_subproc):
         mock_subproc.return_value = MagicMock(stdout=b"", returncode=0)
@@ -157,7 +203,7 @@ class TestAptInstallPackagesMetadata:
         commands = [call[0][0] for call in mock_subproc.call_args_list]
         assert ["apt-get", "update"] not in commands
 
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     @patch.object(AptPackageManager, "_has_metadata", return_value=False)
     def test_updates_metadata_before_install(self, mock_has_metadata, mock_subproc):
         mock_subproc.return_value = MagicMock(stdout=b"", returncode=0)
@@ -169,11 +215,17 @@ class TestAptInstallPackagesMetadata:
         assert commands[0] == ["apt-get", "update"]
         assert commands[1][:2] == ["apt-get", "install"]
 
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     @patch.object(AptPackageManager, "_has_metadata", return_value=False)
-    def test_raises_when_apt_get_update_fails(self, mock_has_metadata, mock_subproc):
-        mock_subproc.return_value = MagicMock(stdout=b"", returncode=1)
+    def test_raises_when_apt_get_update_fails(self, mock_has_metadata, mock_subproc, caplog):
+        mock_subproc.return_value = MagicMock(
+            stdout=b"",
+            stderr=b"E: Could not get lock /var/lib/apt/lists/lock",
+            returncode=1,
+        )
         pm = AptPackageManager()
 
-        with pytest.raises(Exception, match="apt-get update"):
+        with caplog.at_level(logging.ERROR), pytest.raises(Exception, match="apt-get update"):
             pm.install_packages(["gdb"])
+
+        assert "E: Could not get lock /var/lib/apt/lists/lock" in caplog.text

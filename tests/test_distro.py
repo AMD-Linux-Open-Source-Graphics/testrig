@@ -393,26 +393,30 @@ class TestAptPackageManagerCheckRoot:
 class TestRunCommand:
     @patch("testrig.packagemanager.subprocess.run")
     def test_returns_returncode_and_stdout(self, mock_subproc):
-        """_run_command returns a (returncode, stdout) tuple so callers can
-        check the exit status instead of relying on stdout alone."""
-        mock_subproc.return_value = MagicMock(stdout=b"1.2.3", returncode=0)
+        """_run_command returns a (returncode, stdout, stderr) tuple so callers
+        can check the exit status and log diagnostics instead of relying on
+        stdout alone."""
+        mock_subproc.return_value = MagicMock(stdout=b"1.2.3", stderr=b"", returncode=0)
         pm = AptPackageManager()
 
-        returncode, stdout = pm._run_command(["some", "command"])
+        returncode, stdout, stderr = pm._run_command(["some", "command"])
 
         assert returncode == 0
         assert stdout == "1.2.3"
+        assert stderr == ""
 
     @patch("testrig.packagemanager.subprocess.run")
     def test_returns_nonzero_returncode(self, mock_subproc):
-        """A failing command's non-zero return code is surfaced to callers."""
-        mock_subproc.return_value = MagicMock(stdout=b"", returncode=1)
+        """A failing command's non-zero return code and stderr are surfaced to
+        callers."""
+        mock_subproc.return_value = MagicMock(stdout=b"", stderr=b"boom", returncode=1)
         pm = AptPackageManager()
 
-        returncode, stdout = pm._run_command(["some", "command"])
+        returncode, stdout, stderr = pm._run_command(["some", "command"])
 
         assert returncode == 1
         assert stdout == ""
+        assert stderr == "boom"
 
 
 # ==========================================================================
@@ -421,7 +425,7 @@ class TestRunCommand:
 
 
 class TestAptIsInstalled:
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_returns_version_string(self, mock_subproc):
         mock_subproc.return_value = MagicMock(stdout=b"1.2.3-1ubuntu1", returncode=0)
         pm = AptPackageManager()
@@ -435,7 +439,7 @@ class TestAptIsInstalled:
             capture_output=True,
         )
 
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_missing_package_returns_none_on_nonzero_returncode(self, mock_subproc):
         """_run_command returns the return code and is_installed checks it.
         For missing packages, dpkg-query returns a non-zero returncode, so
@@ -447,7 +451,7 @@ class TestAptIsInstalled:
 
         assert result is None
 
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_nonzero_returncode_with_stdout_still_returns_none(self, mock_subproc):
         """Even if the command writes something to stdout, a non-zero return
         code means the package is not installed, so is_installed returns None."""
@@ -458,7 +462,7 @@ class TestAptIsInstalled:
 
         assert result is None
 
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_zero_returncode_returns_version(self, mock_subproc):
         """A zero return code means the package is installed, so the version
         string from stdout is returned."""
@@ -477,9 +481,9 @@ class TestAptIsInstalled:
 
 class TestAptInstallPackages:
     @patch("testrig.packagemanager.apt.AptPackageManager._has_metadata", return_value=True)
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_successful_install(self, mock_subproc, mock_has_metadata, caplog):
-        mock_subproc.return_value = MagicMock(stdout=b"Installing packages...", returncode=0)
+        mock_subproc.return_value = MagicMock(stdout=b"Installing packages...", stderr=b"", returncode=0)
         pm = AptPackageManager()
 
         with caplog.at_level(logging.INFO):
@@ -492,9 +496,27 @@ class TestAptInstallPackages:
         )
         assert "packages installed 'pkg-a pkg-b" in caplog.text
 
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.apt.AptPackageManager._has_metadata", return_value=True)
+    @patch("testrig.packagemanager.subprocess.run")
+    def test_failed_install_logs_both_streams_and_raises(self, mock_subproc, mock_has_metadata, caplog):
+        """A non-zero return code from 'apt-get install' is logged with both
+        stdout and stderr, then raised so the caller sees the failure."""
+        mock_subproc.return_value = MagicMock(
+            stdout=b"Reading package lists...",
+            stderr=b"E: Unable to locate package pkg-a",
+            returncode=100,
+        )
+        pm = AptPackageManager()
+
+        with caplog.at_level(logging.ERROR), pytest.raises(Exception, match="installation of packages"):
+            pm.install_packages(["pkg-a", "pkg-b"])
+
+        assert "Reading package lists..." in caplog.text
+        assert "E: Unable to locate package pkg-a" in caplog.text
+
+    @patch("testrig.packagemanager.subprocess.run")
     def test_install_command_joins_packages_as_single_arg(self, mock_subproc):
-        mock_subproc.return_value = MagicMock(stdout=b"", returncode=0)
+        mock_subproc.return_value = MagicMock(stdout=b"", stderr=b"", returncode=0)
         pm = AptPackageManager()
 
         pm.install_packages(["pkg-a", "pkg-b"])
@@ -509,7 +531,7 @@ class TestAptInstallPackages:
 
 
 class TestAptGetPackageInfo:
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_returns_version(self, mock_subproc):
         mock_subproc.return_value = MagicMock(stdout=b"5.15.0-76-generic", returncode=0)
         pm = AptPackageManager()
@@ -518,7 +540,7 @@ class TestAptGetPackageInfo:
 
         assert result == "5.15.0-76-generic"
 
-    @patch("testrig.packagemanager.apt.subprocess.run")
+    @patch("testrig.packagemanager.subprocess.run")
     def test_raises_when_not_installed(self, mock_subproc):
         """When the package is not installed dpkg-query returns a non-zero
         return code, is_installed returns None, and get_package_info raises."""

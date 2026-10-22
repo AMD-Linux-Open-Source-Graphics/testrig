@@ -48,6 +48,16 @@ def make_popen_mock(mock_popen, returncode=0, stdout_lines=None):
     return process
 
 
+@pytest.fixture
+def assume_binaries_present():
+    """Treat test binaries as existing and executable so tests exercising
+    execution logic are unaffected by the binary existence check."""
+    with patch("testrig.rig.os.path.isfile", return_value=True), patch(
+        "testrig.rig.os.access", return_value=True
+    ):
+        yield
+
+
 # ==========================================================================
 # Group A: parse_rig()
 # ==========================================================================
@@ -219,6 +229,7 @@ class TestVerifyPackages:
 # ==========================================================================
 
 
+@pytest.mark.usefixtures("assume_binaries_present")
 class TestExecuteBinary:
     @patch("testrig.rig.subprocess.Popen")
     def test_pass_returns_true(self, mock_subproc):
@@ -279,6 +290,68 @@ class TestExecuteBinary:
             text=True,
             bufsize=1,
         )
+
+
+class TestExecuteBinaryMissing:
+    @patch("testrig.rig.subprocess.Popen")
+    def test_missing_binary_returns_false_and_does_not_run(self, mock_subproc):
+        run = make_rig()
+
+        with patch("testrig.rig.os.path.isfile", return_value=False):
+            result = run._execute_binary("/fake/bin/missing")
+
+        assert result is False
+        mock_subproc.assert_not_called()
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_missing_binary_logs_error(self, mock_subproc, caplog):
+        run = make_rig()
+
+        with caplog.at_level(logging.ERROR), patch("testrig.rig.os.path.isfile", return_value=False):
+            run._execute_binary("/fake/bin/missing")
+
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert len(error_records) == 1
+        assert "does not exist" in error_records[0].getMessage()
+        assert "/fake/bin/missing" in error_records[0].getMessage()
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_missing_binary_records_failed_result(self, mock_subproc):
+        run = make_rig()
+
+        with patch("testrig.rig.os.path.isfile", return_value=False):
+            run._execute_binary("/fake/bin/missing")
+
+        assert len(run.test_results) == 1
+        result = run.test_results[0]
+        assert result["binary"] == "/fake/bin/missing"
+        assert result["execution_state"] == "FAIL"
+        assert result["return_code"] is None
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_non_executable_binary_returns_false_and_does_not_run(self, mock_subproc):
+        run = make_rig()
+
+        with patch("testrig.rig.os.path.isfile", return_value=True), patch(
+            "testrig.rig.os.access", return_value=False
+        ):
+            result = run._execute_binary("/fake/bin/not_exec")
+
+        assert result is False
+        mock_subproc.assert_not_called()
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_non_executable_binary_logs_error(self, mock_subproc, caplog):
+        run = make_rig()
+
+        with caplog.at_level(logging.ERROR), patch("testrig.rig.os.path.isfile", return_value=True), patch(
+            "testrig.rig.os.access", return_value=False
+        ):
+            run._execute_binary("/fake/bin/not_exec")
+
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert len(error_records) == 1
+        assert "not executable" in error_records[0].getMessage()
 
 
 # ==========================================================================
@@ -343,6 +416,7 @@ class TestResolveTestBinaries:
 # ==========================================================================
 
 
+@pytest.mark.usefixtures("assume_binaries_present")
 class TestRunTests:
     @patch("testrig.rig.subprocess.Popen")
     def test_all_pass(self, mock_subproc):
@@ -419,12 +493,30 @@ class TestRunTests:
             mock_resolve.assert_called_once()
             assert result == {"passed": [], "failed": []}
 
+    @patch("testrig.rig.subprocess.Popen")
+    def test_missing_binary_marked_failed(self, mock_subproc):
+        make_popen_mock(mock_subproc, returncode=0)
+
+        run = make_rig()
+        run.distro = make_mock_distro()
+        run.binary_path = "/bin"
+        run.test_binaries = ["/bin/test_a", "/bin/missing"]
+
+        def isfile(path):
+            return path != "/bin/missing"
+
+        with patch("testrig.rig.os.path.isfile", side_effect=isfile):
+            result = run.run_tests()
+
+        assert result == {"passed": ["/bin/test_a"], "failed": ["/bin/missing"]}
+
 
 # ==========================================================================
 # Group G: execute()
 # ==========================================================================
 
 
+@pytest.mark.usefixtures("assume_binaries_present")
 class TestExecute:
     @patch("testrig.rig.subprocess.Popen")
     @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake")
@@ -912,6 +1004,7 @@ class TestRunCommand:
             assert "boom" in error_records[0].getMessage()
 
 
+@pytest.mark.usefixtures("assume_binaries_present")
 class TestSubprocessEnvPropagation:
     @patch("testrig.rig.subprocess.Popen")
     def test_rocminfo_receives_rocr_visible_devices(self, mock_subproc):

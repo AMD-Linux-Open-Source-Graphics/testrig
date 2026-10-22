@@ -190,6 +190,30 @@ class Rig:
         logger.info("------------------------------------------------------------")
         logger.info(f"binary: {os.path.basename(binary_path)}")
         logger.info("------------------------------------------------------------")
+
+        missing_reason = None
+        if not os.path.isfile(binary_path):
+            missing_reason = "test binary does not exist"
+        elif not os.access(binary_path, os.X_OK):
+            missing_reason = "test binary is not executable"
+
+        if missing_reason is not None:
+            logger.error("%s: %s", missing_reason, binary_path)
+            test_time = datetime.now(timezone.utc)
+            self.test_results.append(
+                {
+                    "binary": binary_path,
+                    "command": run_command,
+                    "execution_state": "FAIL",
+                    "start_time": test_time,
+                    "end_time": test_time,
+                    "duration": test_time - test_time,
+                    "return_code": None,
+                }
+            )
+            logger.info("result: FAIL")
+            return False
+
         logger.info("running command: '{}'".format(" ".join(run_command)))
 
         test_start_time = datetime.now(timezone.utc)

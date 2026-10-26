@@ -61,11 +61,12 @@ def cli(ctx, run_directory, filename, debug, no_root, dry_run, verbose, output_d
         file_output = ctx.obj["settings"]["enable_file_output"]
     ctx.obj["file_output"] = file_output
 
-    input_path = os.path.abspath(os.path.join(run_directory, filename))
-    if not os.path.exists(input_path):
-        raise Exception(f"Input file not found: {input_path}")
 
-    ctx.obj["input_path"] = input_path
+def resolve_input_path(ctx):
+    input_path = os.path.abspath(os.path.join(ctx.obj["run_directory"], ctx.obj["filename"]))
+    if not os.path.exists(input_path):
+        raise click.FileError(input_path, hint="input file not found")
+    return input_path
 
 
 @cli.command("run")
@@ -90,9 +91,10 @@ def run_test(ctx, no_debug):
         )
         logger.addHandler(filelog_handler)
 
+    input_path = resolve_input_path(ctx)
     logger.info("Running test: {}".format(ctx.obj["filename"]))
     rig = parse_rig(
-        ctx.obj["input_path"],
+        input_path,
         run_uuid,
         dry_run=ctx.obj["dry_run"],
         settings=ctx.obj["settings"],
@@ -121,8 +123,9 @@ def run_test(ctx, no_debug):
 @click.option("--ignore-test-packages", is_flag=True, default=False, help="Ignore missing test packages")
 @click.pass_context
 def check_install(ctx, ignore_debug_packages, ignore_test_packages):
-    logger.info("running install check for {}".format(ctx.obj["input_path"]))
-    rig = parse_rig(ctx.obj["input_path"], uuid.uuid7(), settings=ctx.obj["settings"])
+    input_path = resolve_input_path(ctx)
+    logger.info("running install check for {}".format(input_path))
+    rig = parse_rig(input_path, uuid.uuid7(), settings=ctx.obj["settings"])
     rig.no_root = ctx.obj["no_root"]
 
     if not ignore_test_packages:

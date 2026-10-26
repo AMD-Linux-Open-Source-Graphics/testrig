@@ -108,6 +108,11 @@ Options
 
 --output-dir=<path to directory>
     Base directory for storing output files. Defaults to ``./testrig-logs``.
+    If this directory does not yet exist it is created and used directly. If
+    it already exists, output is written to a sibling directory named
+    ``<output-dir>-YYYYMMDD_HHmm`` using the local time the run started
+    (``YYYYMMDD`` date, ``HHmm`` hour and minute); a ``-N`` counter is
+    appended if a run in the same minute already created that directory.
 
 --file-output / --no-file-output
     Enable or disable writing output files to disk for this run. Overrides

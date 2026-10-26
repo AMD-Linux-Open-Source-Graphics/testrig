@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import datetime
 import logging
 import os
 import sys
@@ -69,6 +70,19 @@ def resolve_input_path(ctx):
     return input_path
 
 
+def resolve_run_output_dir(base_dir, now=None):
+    if not os.path.exists(base_dir):
+        return base_dir
+    # base_dir is taken, so fall back to a local-time timestamped sibling
+    timestamp = (now or datetime.datetime.now()).strftime("%Y%m%d_%H%M")
+    candidate = f"{base_dir}-{timestamp}"
+    suffix = 1
+    while os.path.exists(candidate):
+        candidate = f"{base_dir}-{timestamp}-{suffix}"
+        suffix += 1
+    return candidate
+
+
 @cli.command("run")
 @click.option(
     "--no-debug", is_flag=True, default=False, help="Do not attempt to gather debug information on failed tests"
@@ -81,7 +95,7 @@ def run_test(ctx, no_debug):
     run_output_dir = None
     if ctx.obj["file_output"]:
         # create directory for output for this run
-        run_output_dir = os.path.join(ctx.obj["output_dir"], str(run_uuid))
+        run_output_dir = resolve_run_output_dir(ctx.obj["output_dir"])
         os.makedirs(run_output_dir, exist_ok=True)
         ctx.obj["run_output_dir"] = run_output_dir
         logger.info(f"Output directory for this run: {run_output_dir}")

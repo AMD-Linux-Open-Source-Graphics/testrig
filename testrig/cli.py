@@ -33,8 +33,9 @@ logger = logging.getLogger("testrig")
 @click.option(
     "--output-dir",
     type=click.Path(dir_okay=True),
-    default="./testrig-logs",
-    help="Base directory for storing output files",
+    default=None,
+    help="Base directory for storing output files. Overrides the output_dir setting; "
+    "if unset, the setting (default: ./testrig-logs) is used",
 )
 @click.option(
     "--file-output/--no-file-output",
@@ -57,7 +58,7 @@ def cli(ctx, run_directory, filename, debug, no_root, dry_run, verbose, output_d
     ctx.obj["no_root"] = no_root
     ctx.obj["dry_run"] = dry_run
     ctx.obj["settings"] = load_settings()
-    ctx.obj["output_dir"] = os.path.abspath(output_dir)
+    ctx.obj["output_dir"] = resolve_output_dir(output_dir, ctx.obj["settings"])
     if file_output is None:
         file_output = ctx.obj["settings"]["enable_file_output"]
     ctx.obj["file_output"] = file_output
@@ -68,6 +69,12 @@ def resolve_input_path(ctx):
     if not os.path.exists(input_path):
         raise click.FileError(input_path, hint="input file not found")
     return input_path
+
+
+def resolve_output_dir(output_dir, settings):
+    if output_dir is None:
+        output_dir = settings["output_dir"]
+    return os.path.abspath(output_dir)
 
 
 def resolve_run_output_dir(base_dir, now=None):

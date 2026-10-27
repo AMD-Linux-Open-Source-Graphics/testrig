@@ -79,6 +79,11 @@ enable_file_output
     filesystem unless overridden by this setting or the ``--file-output``
     command-line option.
 
+output_dir
+    Base directory for storing output files when file output is enabled.
+    Defaults to ``./testrig-logs``. Overridden by the ``--output-dir``
+    command-line option when given.
+
 Examples
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -107,7 +112,8 @@ Options
     Describe the test to be run without actually execting anything
 
 --output-dir=<path to directory>
-    Base directory for storing output files. Defaults to ``./testrig-logs``.
+    Base directory for storing output files. Overrides the ``output_dir``
+    setting; if unset, the setting (default: ``./testrig-logs``) is used.
     If this directory does not yet exist it is created and used directly. If
     it already exists, output is written to a sibling directory named
     ``<output-dir>-YYYYMMDD_HHmm`` using the local time the run started

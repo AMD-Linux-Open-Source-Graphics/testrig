@@ -7,7 +7,7 @@
 import datetime
 import os
 
-from testrig.cli import resolve_run_output_dir
+from testrig.cli import resolve_output_dir, resolve_run_output_dir
 
 
 class TestResolveRunOutputDir:
@@ -54,3 +54,32 @@ class TestResolveRunOutputDir:
         result = resolve_run_output_dir(str(base), now=now)
 
         assert os.path.basename(result).startswith("testrig-logs-")
+
+
+class TestResolveOutputDir:
+    def test_cli_value_overrides_setting(self):
+        settings = {"output_dir": "/from/config"}
+
+        result = resolve_output_dir("/from/cli", settings)
+
+        assert result == os.path.abspath("/from/cli")
+
+    def test_falls_back_to_setting_when_cli_unset(self):
+        settings = {"output_dir": "/from/config"}
+
+        result = resolve_output_dir(None, settings)
+
+        assert result == os.path.abspath("/from/config")
+
+    def test_uses_default_setting_when_neither_given(self):
+        settings = {"output_dir": "./testrig-logs"}
+
+        result = resolve_output_dir(None, settings)
+
+        assert result == os.path.abspath("./testrig-logs")
+
+    def test_result_is_absolute(self):
+        settings = {"output_dir": "relative/dir"}
+
+        assert os.path.isabs(resolve_output_dir(None, settings))
+        assert os.path.isabs(resolve_output_dir("another/relative", settings))

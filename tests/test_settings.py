@@ -24,6 +24,7 @@ class TestLoadSettings:
         assert settings["ROCR_VISIBLE_DEVICES"] == ""
         assert settings["gdb_pyfile_dir"] == "/usr/share/testrig"
         assert settings["enable_file_output"] is False
+        assert settings["output_dir"] == "./testrig-logs"
 
     def test_does_not_mutate_default_settings(self, tmp_path):
         path = write_toml(tmp_path / "settings.toml", "disable_debug = true\n")
@@ -84,3 +85,10 @@ class TestLoadSettings:
         settings = load_settings(paths=[path])
 
         assert settings["enable_file_output"] is True
+
+    def test_loads_output_dir_from_file(self, tmp_path):
+        path = write_toml(tmp_path / "settings.toml", 'output_dir = "/var/log/testrig"\n')
+
+        settings = load_settings(paths=[path])
+
+        assert settings["output_dir"] == "/var/log/testrig"

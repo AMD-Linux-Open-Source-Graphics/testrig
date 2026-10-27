@@ -22,6 +22,8 @@ DEFAULT_SETTINGS = {
     "gdb_pyfile_dir": "/usr/share/testrig",
     # write output files (logs, run summary) to disk during rig execution
     "enable_file_output": False,
+    # base directory for output files when file output is enabled
+    "output_dir": "./testrig-logs",
 }
 
 

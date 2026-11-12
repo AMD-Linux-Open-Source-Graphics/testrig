@@ -18,8 +18,26 @@ Input Format
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A rig file has a top-level ``name`` field and one section per supported distro
-(for example ``[ubuntu]`` or ``[fedora]``). Each distro section supports the
-following fields:
+(for example ``[ubuntu]`` or ``[fedora]``). The following optional top-level
+field is also supported:
+
+results
+    How each test's result is determined: ``returncode`` (default) uses only
+    the exit code; ``junit`` also parses a JUnit XML file (pytest, gtest and
+    ctest formats) written by the test. Its path is substituted for
+    ``{results_file}`` in ``interpreter`` and ``extra_args`` and exported as
+    ``TESTRIG_RESULTS_FILE``. With ``junit``, a non-zero exit is ``FAIL``; exit
+    0 with failed cases or a missing/unreadable results file is ``WARN`` (no
+    non-zero testrig exit, no debug run); exit 0 with every case skipped is
+    ``SKIP``; anything else is ``PASS``.
+
+Each distro section may set:
+
+runner
+    Kind of test to run: ``binary`` (default) or ``script``. The runner
+    determines which of the fields below apply.
+
+The ``binary`` runner (the default) supports the following fields:
 
 test_binary_path
     Directory containing the test entry points.
@@ -40,7 +58,27 @@ extra_env_var
     Optional table of environment variables to set when running the test
     binaries. Keys are the environment variable names and values are what they
     should be set to. If omitted or empty, no additional environment variables
-    are set.
+    are set. Applies to all runners.
+
+The ``script`` runner is for tests written in interpreted languages such as
+Python or bash. It supports the following fields (plus ``extra_env_var``):
+
+tests
+    Allowlist of script names to run, combined with ``test_path``.
+
+test_path
+    Optional directory containing the scripts. Relative paths are resolved
+    against the directory of the rig file. Defaults to that directory.
+
+interpreter
+    Optional command used to run each script, as a string (``"python3 -u"``)
+    or a list (``["bash", "-eu"]``). When omitted, scripts must be executable
+    and are run directly via their shebang.
+
+test_packages
+    Optional list of packages that must be installed to run the scripts.
+
+Debug information gathering (gdb) is skipped for ``script`` tests.
 
 Example::
 
@@ -52,6 +90,13 @@ Example::
     test_package_name = "rocm-tests"
     test_debug_package_names = ["rocm-tests-dbgsym"]
     extra_env_var = {HSA_ENABLE_SDMA = "0", LD_LIBRARY_PATH = "/opt/rocm/lib"}
+
+    [fedora]
+    runner = "script"
+    interpreter = "python3"
+    test_path = "tests"
+    tests = ["check_devices.py"]
+    test_packages = ["python3-numpy"]
 
 Global Settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

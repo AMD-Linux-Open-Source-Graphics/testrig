@@ -25,7 +25,7 @@
     "execution_state": {
       "type": "string",
       "description": "Result state enum. See docs/output_format.md for detailed semantics.",
-      "enum": ["PASS", "WARN", "FAIL", "SYSTEM_FAIL", "RUNNER_FAIL", "UNKNOWN"]
+      "enum": ["PASS", "WARN", "FAIL", "SKIP", "SYSTEM_FAIL", "RUNNER_FAIL", "UNKNOWN"]
     },
     "timestamp": {
       "type": "string",
@@ -180,6 +180,44 @@
           "return_code": {
             "type": ["integer", "null"],
             "description": "Process exit code, or null if the binary was not executed."
+          },
+          "results_file": {
+            "type": "string",
+            "description": "Path of the structured results file the test was asked to write. Present only when a results format other than returncode is configured."
+          },
+          "results_status": {
+            "type": "string",
+            "enum": ["ok", "missing", "invalid"],
+            "description": "Whether the results file was found and parsed. Present only alongside results_file."
+          },
+          "results_error": {
+            "type": ["string", "null"],
+            "description": "Reason when results_status is not \"ok\", otherwise null."
+          },
+          "test_cases": {
+            "type": "array",
+            "description": "Individual test cases parsed from the results file. Present only alongside results_file.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "classname", "execution_state", "duration", "message"],
+              "properties": {
+                "name": { "type": "string" },
+                "classname": { "type": ["string", "null"] },
+                "execution_state": {
+                  "type": "string",
+                  "enum": ["PASS", "FAIL", "SKIP"]
+                },
+                "duration": {
+                  "type": ["string", "null"],
+                  "description": "ISO 8601 duration with sub-second precision, e.g. PT0.25S."
+                },
+                "message": {
+                  "type": ["string", "null"],
+                  "description": "Failure, error or skip message (truncated), otherwise null."
+                }
+              }
+            }
           },
           "gpu_monitoring": {
             "type": "object",

@@ -1,0 +1,17 @@
+name = "trivial-junit"
+
+# Per-test-case results: pytest writes JUnit XML to the path testrig
+# substitutes for {results_file} (also exported as $TESTRIG_RESULTS_FILE).
+results = "junit"
+
+[fedora]
+runner = "script"
+interpreter = "python3 -m pytest -p no:cacheprovider --junitxml={results_file}"
+tests = ["trivial_pytest_example.py"]
+test_packages = ["python3-pytest"]
+
+[ubuntu]
+runner = "script"
+interpreter = "python3 -m pytest -p no:cacheprovider --junitxml={results_file}"
+tests = ["trivial_pytest_example.py"]
+test_packages = ["python3-pytest"]

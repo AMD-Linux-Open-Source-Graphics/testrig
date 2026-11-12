@@ -16,7 +16,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 logger = logging.getLogger("testrig.summary")
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 SUMMARY_FILENAME = "testrig_summary.json"
 
 
@@ -42,6 +42,13 @@ def _iso_duration(td):
         duration += f"{minutes}M"
     duration += f"{seconds}S"
     return duration
+
+
+def _iso_duration_seconds(seconds):
+    """ISO 8601 duration keeping sub-second precision, e.g. PT0.25S."""
+    if seconds is None:
+        return None
+    return f"PT{seconds:.3f}".rstrip("0").rstrip(".") + "S"
 
 
 def _read_proc_meminfo_kib(key):
@@ -170,9 +177,24 @@ def _gather_git_info(rig_dir, inputfile_path):
 def _overall_result(rig):
     if rig.dry_run:
         return "UNKNOWN"
-    if rig.run_result and rig.run_result.get("failed"):
+    run_result = rig.run_result or {}
+    if run_result.get("failed"):
         return "FAIL"
+    if run_result.get("warned"):
+        return "WARN"
+    if run_result.get("skipped") and not run_result.get("passed"):
+        return "SKIP"
     return "PASS"
+
+
+def _build_test_case_entry(case):
+    return {
+        "name": case.name,
+        "classname": case.classname,
+        "execution_state": case.state,
+        "duration": _iso_duration_seconds(case.duration),
+        "message": case.message,
+    }
 
 
 def _build_test_information_entry(test_result):
@@ -187,6 +209,11 @@ def _build_test_information_entry(test_result):
     }
     if "gpu_monitoring" in test_result:
         entry["gpu_monitoring"] = test_result["gpu_monitoring"]
+    if "test_cases" in test_result:
+        entry["results_file"] = test_result["results_file"]
+        entry["results_status"] = test_result["results_status"]
+        entry["results_error"] = test_result["results_error"]
+        entry["test_cases"] = [_build_test_case_entry(case) for case in test_result["test_cases"]]
     return entry
 
 

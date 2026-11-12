@@ -32,6 +32,10 @@ def make_rig(name="testrun", spec=None, dry_run=False, run_uuid=TEST_UUID):
     return Rig(name, spec, dry_run, run_uuid)
 
 
+def run_results(passed=(), failed=(), warned=(), skipped=()):
+    return {"passed": list(passed), "failed": list(failed), "warned": list(warned), "skipped": list(skipped)}
+
+
 def make_mock_distro(name="ubuntu"):
     distro = MagicMock()
     distro.name = name
@@ -568,7 +572,7 @@ class TestRunTests:
 
         result = run.run_tests()
 
-        assert result == {"passed": ["/bin/test_a", "/bin/test_b"], "failed": []}
+        assert result == run_results(passed=["/bin/test_a", "/bin/test_b"])
 
     @patch("testrig.rig.subprocess.Popen")
     def test_all_fail(self, mock_subproc):
@@ -581,7 +585,7 @@ class TestRunTests:
 
         result = run.run_tests()
 
-        assert result == {"passed": [], "failed": ["/bin/test_a", "/bin/test_b"]}
+        assert result == run_results(failed=["/bin/test_a", "/bin/test_b"])
 
     @patch("testrig.rig.subprocess.Popen")
     def test_mixed_results(self, mock_subproc):
@@ -597,7 +601,7 @@ class TestRunTests:
 
         result = run.run_tests()
 
-        assert result == {"passed": ["/bin/test_a"], "failed": ["/bin/test_b"]}
+        assert result == run_results(passed=["/bin/test_a"], failed=["/bin/test_b"])
 
     @patch("testrig.rig.subprocess.Popen")
     def test_total_tests_print_bug(self, mock_subproc, caplog):
@@ -630,7 +634,7 @@ class TestRunTests:
 
             result = run.run_tests()
             mock_resolve.assert_called_once()
-            assert result == {"passed": [], "failed": []}
+            assert result == run_results()
 
     @patch("testrig.rig.subprocess.Popen")
     def test_missing_binary_marked_failed(self, mock_subproc):
@@ -647,7 +651,7 @@ class TestRunTests:
         with patch("testrig.rig.os.path.isfile", side_effect=isfile):
             result = run.run_tests()
 
-        assert result == {"passed": ["/bin/test_a"], "failed": ["/bin/missing"]}
+        assert result == run_results(passed=["/bin/test_a"], failed=["/bin/missing"])
 
 
 # ==========================================================================
@@ -680,7 +684,7 @@ class TestExecute:
 
         result = run.execute(force_debug=False)
 
-        assert result == {"passed": ["/opt/bin/test_a"], "failed": []}
+        assert result == run_results(passed=["/opt/bin/test_a"])
 
     @patch("testrig.rig.subprocess.Popen")
     @patch("testrig.rig.tempfile.mkdtemp")
@@ -708,7 +712,7 @@ class TestExecute:
 
         result = run.execute(force_debug=True)
 
-        assert result == {"passed": [], "failed": []}
+        assert result == run_results()
 
     @patch("testrig.rig.subprocess.Popen")
     @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake")
@@ -734,7 +738,7 @@ class TestExecute:
 
         result = run.execute(force_debug=True, disable_debug=True)
 
-        assert result == {"passed": ["/opt/bin/test_a"], "failed": []}
+        assert result == run_results(passed=["/opt/bin/test_a"])
 
     @patch("testrig.rig.subprocess.Popen")
     @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake")
@@ -760,7 +764,7 @@ class TestExecute:
 
         result = run.execute(force_debug=False, disable_debug=True)
 
-        assert result == {"passed": ["/opt/bin/test_a"], "failed": []}
+        assert result == run_results(passed=["/opt/bin/test_a"])
 
 
 # ==========================================================================
@@ -1207,3 +1211,272 @@ class TestSubprocessEnvPropagation:
             text=True,
             bufsize=1,
         )
+
+
+# ==========================================================================
+# Group L: script runner
+# ==========================================================================
+
+
+def make_script_rig(rig_dir, **distro_spec):
+    spec = {"name": "scripts", "ubuntu": {"runner": "script", "tests": ["t.py"], **distro_spec}}
+    run = Rig("scripts", spec, False, TEST_UUID, rig_dir=str(rig_dir))
+    run.distro = make_mock_distro("ubuntu")
+    return run
+
+
+class TestScriptRunnerRig:
+    @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake")
+    @patch("testrig.rig.get_distro")
+    def test_setup_resolves_test_path_against_rig_dir(self, mock_get_distro, mock_mkdtemp, tmp_path):
+        run = make_script_rig(tmp_path, test_path="tests")
+        mock_get_distro.return_value = run.distro
+
+        run._setup()
+
+        assert run.binary_path == str(tmp_path / "tests")
+
+    def test_resolves_tests_field(self, tmp_path):
+        run = make_script_rig(tmp_path)
+        run.binary_path = str(tmp_path)
+
+        run._resolve_test_binaries()
+
+        assert run.test_binaries == [str(tmp_path / "t.py")]
+
+    def test_missing_tests_field_raises(self, tmp_path):
+        spec = {"name": "scripts", "ubuntu": {"runner": "script"}}
+        run = Rig("scripts", spec, False, TEST_UUID, rig_dir=str(tmp_path))
+        run.distro = make_mock_distro("ubuntu")
+        run.binary_path = str(tmp_path)
+
+        with pytest.raises(Exception, match='"tests" is not specified'):
+            run._resolve_test_binaries()
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_runs_with_interpreter_and_extra_args(self, mock_subproc, tmp_path):
+        make_popen_mock(mock_subproc, returncode=0)
+        script = tmp_path / "t.py"
+        script.write_text("print('hi')\n")
+        script.chmod(0o644)
+        run = make_script_rig(tmp_path, interpreter="python3 -u")
+        run.rig_spec["extra_args"] = ["--fast"]
+
+        assert run._execute_binary(str(script)) is True
+
+        assert mock_subproc.call_args[0][0] == ["python3", "-u", str(script), "--fast"]
+        assert run.test_results[0]["command"] == ["python3", "-u", str(script), "--fast"]
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_non_executable_without_interpreter_fails(self, mock_subproc, tmp_path):
+        script = tmp_path / "t.py"
+        script.write_text("print('hi')\n")
+        script.chmod(0o644)
+        run = make_script_rig(tmp_path)
+
+        assert run._execute_binary(str(script)) is False
+        mock_subproc.assert_not_called()
+
+    def test_verify_packages_checks_all_listed(self, tmp_path):
+        run = make_script_rig(tmp_path, test_packages=["python3", "python3-numpy"])
+        run.distro.check_for_installed_packages.return_value = True
+
+        run.verify_packages()
+
+        run.distro.check_for_installed_packages.assert_called_once_with(
+            ["python3", "python3-numpy"], install_if_not_present=True
+        )
+
+    def test_verify_packages_none_required(self, tmp_path, caplog):
+        run = make_script_rig(tmp_path)
+
+        with caplog.at_level(logging.INFO):
+            run.verify_packages()
+
+        run.distro.check_for_installed_packages.assert_not_called()
+        assert "no test packages required" in caplog.text
+
+    def test_verify_debug_packages_none_required(self, tmp_path):
+        run = make_script_rig(tmp_path)
+
+        run.verify_debug_packages()
+
+        run.distro.check_for_installed_packages.assert_not_called()
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_gather_debug_info_skipped(self, mock_subproc, tmp_path, caplog):
+        run = make_script_rig(tmp_path)
+        run.workdir = str(tmp_path)
+
+        with caplog.at_level(logging.INFO):
+            assert run.gather_debug_info([str(tmp_path / "t.py")]) is False
+
+        mock_subproc.assert_not_called()
+        assert "not supported" in caplog.text
+
+    @patch("testrig.rig.subprocess.Popen")
+    @patch("testrig.rig.tempfile.mkdtemp", return_value="/tmp/fake")
+    @patch("testrig.rig.get_distro")
+    def test_force_debug_not_recorded_as_debug_run(self, mock_get_distro, mock_mkdtemp, mock_subproc, tmp_path):
+        make_popen_mock(mock_subproc, returncode=0)
+        run = make_script_rig(tmp_path)
+        mock_get_distro.return_value = run.distro
+
+        run.execute(force_debug=True)
+
+        assert run.was_debug_run is False
+        assert run.debug_binaries == []
+
+    def test_unknown_runner_raises(self, tmp_path):
+        run = make_script_rig(tmp_path, runner="nope")
+
+        with pytest.raises(Exception, match='unknown runner "nope"'):
+            run.verify_packages()
+
+
+# ==========================================================================
+# Group M: structured (junit) results
+# ==========================================================================
+
+JUNIT_PASS_FAIL_SKIP = """<testsuites><testsuite>
+<testcase name="ok" time="0.1"/>
+<testcase name="bad"><failure message="boom"/></testcase>
+<testcase name="later"><skipped message="nope"/></testcase>
+</testsuite></testsuites>"""
+
+JUNIT_ALL_SKIP = '<testsuite><testcase name="later"><skipped/></testcase></testsuite>'
+
+
+def popen_writing_junit(mock_popen, content, returncode=0):
+    """Make the mocked test process write `content` to $TESTRIG_RESULTS_FILE."""
+
+    def fake_popen(command, **kwargs):
+        if content is not None:
+            with open(kwargs["env"]["TESTRIG_RESULTS_FILE"], "w") as results_file:
+                results_file.write(content)
+        return make_popen_mock(MagicMock(), returncode=returncode)
+
+    mock_popen.side_effect = fake_popen
+
+
+def make_junit_rig(tmp_path, **kwargs):
+    spec = {"name": "t", "results": "junit", **kwargs.pop("spec", {})}
+    run = Rig("t", spec, False, TEST_UUID, **kwargs)
+    run.workdir = str(tmp_path)
+    return run
+
+
+@pytest.mark.usefixtures("assume_binaries_present")
+class TestJunitResults:
+    @patch("testrig.rig.subprocess.Popen")
+    def test_placeholder_and_env_var_point_at_results_file(self, mock_subproc, tmp_path):
+        popen_writing_junit(mock_subproc, JUNIT_ALL_SKIP)
+        run = make_junit_rig(tmp_path, spec={"extra_args": ["--out={results_file}"]})
+
+        run._execute_binary("/bin/test_a")
+
+        expected_path = str(tmp_path / "000-test_a.junit.xml")
+        command = mock_subproc.call_args[0][0]
+        assert command == ["/bin/test_a", f"--out={expected_path}"]
+        assert mock_subproc.call_args.kwargs["env"]["TESTRIG_RESULTS_FILE"] == expected_path
+        assert run.test_results[0]["results_file"] == expected_path
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_results_file_in_output_dir_when_file_output(self, mock_subproc, tmp_path):
+        popen_writing_junit(mock_subproc, JUNIT_ALL_SKIP)
+        output_dir = tmp_path / "out"
+        output_dir.mkdir()
+        run = make_junit_rig(tmp_path, output_dir=str(output_dir), file_output=True)
+
+        run._execute_binary("/bin/test_a")
+
+        assert (output_dir / "000-test_a.junit.xml").exists()
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_zero_exit_with_failed_case_is_warn(self, mock_subproc, tmp_path, caplog):
+        popen_writing_junit(mock_subproc, JUNIT_PASS_FAIL_SKIP, returncode=0)
+        run = make_junit_rig(tmp_path)
+
+        with caplog.at_level(logging.INFO):
+            assert run._execute_binary("/bin/test_a") is True
+
+        result = run.test_results[0]
+        assert result["execution_state"] == "WARN"
+        assert result["results_status"] == "ok"
+        assert [case.state for case in result["test_cases"]] == ["PASS", "FAIL", "SKIP"]
+        assert "result: WARN (cases passed: 1, failed: 1, skipped: 1)" in caplog.text
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_nonzero_exit_is_fail(self, mock_subproc, tmp_path):
+        popen_writing_junit(mock_subproc, JUNIT_PASS_FAIL_SKIP, returncode=1)
+        run = make_junit_rig(tmp_path)
+
+        assert run._execute_binary("/bin/test_a") is False
+        assert run.test_results[0]["execution_state"] == "FAIL"
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_missing_results_after_crash(self, mock_subproc, tmp_path, caplog):
+        popen_writing_junit(mock_subproc, None, returncode=-11)
+        run = make_junit_rig(tmp_path)
+
+        with caplog.at_level(logging.WARNING):
+            run._execute_binary("/bin/test_a")
+
+        result = run.test_results[0]
+        assert result["execution_state"] == "FAIL"
+        assert result["results_status"] == "missing"
+        assert result["test_cases"] == []
+        assert "results file was not written" in caplog.text
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_run_tests_buckets_by_state(self, mock_subproc, tmp_path):
+        contents = iter([JUNIT_ALL_SKIP, JUNIT_PASS_FAIL_SKIP, None])
+        returncodes = iter([0, 0, 1])
+
+        def fake_popen(command, **kwargs):
+            content = next(contents)
+            if content is not None:
+                with open(kwargs["env"]["TESTRIG_RESULTS_FILE"], "w") as results_file:
+                    results_file.write(content)
+            return make_popen_mock(MagicMock(), returncode=next(returncodes))
+
+        mock_subproc.side_effect = fake_popen
+        run = make_junit_rig(tmp_path)
+        run.distro = make_mock_distro()
+        run.test_binaries = ["/bin/skippy", "/bin/warny", "/bin/faily"]
+
+        result = run.run_tests()
+
+        assert result == run_results(skipped=["/bin/skippy"], warned=["/bin/warny"], failed=["/bin/faily"])
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_returncode_format_has_no_results_fields(self, mock_subproc):
+        make_popen_mock(mock_subproc, returncode=0)
+        run = make_rig()
+
+        run._execute_binary("/bin/test_a")
+
+        assert "test_cases" not in run.test_results[0]
+        assert "TESTRIG_RESULTS_FILE" not in mock_subproc.call_args.kwargs["env"]
+
+    def test_unknown_results_format_raises(self):
+        run = make_rig(spec={"name": "t", "results": "tap"})
+
+        with pytest.raises(Exception, match='unknown results format "tap"'):
+            run.results_format
+
+    def test_results_inside_distro_section_raises(self):
+        run = make_rig(spec={"name": "t", "ubuntu": {"results": "junit"}})
+        run.distro = make_mock_distro("ubuntu")
+
+        with pytest.raises(Exception, match=r'inside \[ubuntu\] but must be a top-level key'):
+            run.results_format
+
+    @patch("testrig.rig.subprocess.Popen")
+    def test_placeholder_without_junit_raises(self, mock_subproc):
+        run = make_rig(spec={"name": "t", "extra_args": ["--junitxml={results_file}"]})
+
+        with pytest.raises(Exception, match=r'\{results_file\} is used but the results format is "returncode"'):
+            run._execute_binary("/bin/test_a")
+
+        mock_subproc.assert_not_called()

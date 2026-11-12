@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, mock_open, patch
 
 from testrig import summary
+from testrig.results import CaseResult
 
 # Trimmed but structurally faithful excerpt of real `rocminfo` output (see
 # example/trivial for a full sample) - used to exercise _gather_gpu_info's
@@ -100,6 +101,12 @@ class TestIsoFormatting:
 
     def test_duration_zero(self):
         assert summary._iso_duration(timedelta(seconds=0)) == "PT0S"
+
+    def test_duration_seconds_keeps_fraction(self):
+        assert summary._iso_duration_seconds(0.25) == "PT0.25S"
+        assert summary._iso_duration_seconds(75.0) == "PT75S"
+        assert summary._iso_duration_seconds(0.0) == "PT0S"
+        assert summary._iso_duration_seconds(None) is None
 
     def test_timestamp_includes_utc_offset(self):
         dt = datetime(2026, 8, 19, 17, 0, 0, tzinfo=timezone.utc)
@@ -306,6 +313,62 @@ class TestBuildSummary:
         rig = make_fake_rig(dry_run=True, run_result={"passed": [], "failed": []})
 
         assert summary.build_summary(rig)["overall_result"] == "UNKNOWN"
+
+    def test_overall_result_warn(self):
+        rig = make_fake_rig(run_result={"passed": ["a"], "failed": [], "warned": ["b"], "skipped": []})
+
+        assert summary.build_summary(rig)["overall_result"] == "WARN"
+
+    def test_overall_result_fail_beats_warn(self):
+        rig = make_fake_rig(run_result={"passed": [], "failed": ["a"], "warned": ["b"], "skipped": []})
+
+        assert summary.build_summary(rig)["overall_result"] == "FAIL"
+
+    def test_overall_result_skip_when_nothing_passed(self):
+        rig = make_fake_rig(run_result={"passed": [], "failed": [], "warned": [], "skipped": ["a"]})
+
+        assert summary.build_summary(rig)["overall_result"] == "SKIP"
+
+    def test_overall_result_pass_with_some_skipped(self):
+        rig = make_fake_rig(run_result={"passed": ["a"], "failed": [], "warned": [], "skipped": ["b"]})
+
+        assert summary.build_summary(rig)["overall_result"] == "PASS"
+
+    def test_test_information_includes_test_cases(self):
+        start = datetime(2026, 8, 19, 17, 1, 0, tzinfo=timezone.utc)
+        rig = make_fake_rig(
+            test_results=[
+                {
+                    "binary": "/bin/test_a",
+                    "command": ["/bin/test_a"],
+                    "execution_state": "WARN",
+                    "start_time": start,
+                    "end_time": start,
+                    "duration": timedelta(0),
+                    "return_code": 0,
+                    "results_file": "/tmp/000-test_a.junit.xml",
+                    "results_status": "ok",
+                    "results_error": None,
+                    "test_cases": [
+                        CaseResult(name="bad", classname="x", state="FAIL", duration=0.25, message="boom"),
+                        CaseResult(name="later", classname=None, state="SKIP"),
+                    ],
+                }
+            ]
+        )
+
+        entry = summary.build_summary(rig)["test_information"][0]
+
+        assert entry["results_file"] == "/tmp/000-test_a.junit.xml"
+        assert entry["results_status"] == "ok"
+        assert entry["results_error"] is None
+        assert entry["test_cases"] == [
+            {"name": "bad", "classname": "x", "execution_state": "FAIL", "duration": "PT0.25S", "message": "boom"},
+            {"name": "later", "classname": None, "execution_state": "SKIP", "duration": None, "message": None},
+        ]
+        item_schema = self._load_schema()["properties"]["test_information"]["items"]
+        assert set(entry) <= set(item_schema["properties"])
+        assert set(entry["test_cases"][0]) == set(item_schema["properties"]["test_cases"]["items"]["required"])
 
     def test_test_information_formats_timestamps_and_duration(self):
         start = datetime(2026, 8, 19, 17, 1, 0, tzinfo=timezone.utc)

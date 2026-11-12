@@ -33,6 +33,8 @@ The state will be an enum with the following possible values:
    * some failures detected but didn't hit full failure heuristics
  - FAIL
    * failures detected and failure heuristics met
+ - SKIP
+   * the test ran but all of its test cases were skipped
  - SYSTEM_FAIL
    * this is a failure that was due to the system under test
  - RUNNER_FAIL
@@ -41,6 +43,8 @@ The state will be an enum with the following possible values:
    * catch-all for anything that doesn't fit the other states
 
 At the time of writing, the heuristics have not been implemented but are described here to make sure that they are taken into account for the summary output format
+
+When the rig sets `results = "junit"`, each test is judged as: non-zero exit code is `FAIL`; exit code 0 with a failed case or a missing/unreadable results file is `WARN`; exit code 0 with every case skipped is `SKIP`; otherwise `PASS`. The overall result is `FAIL` if any test failed, else `WARN` if any warned, else `SKIP` if tests were skipped and none passed, else `PASS`.
 
 # testrig output contents
 
@@ -94,6 +98,10 @@ This list will likely change over time but the initial release will contain
      + duration
      + return code
      + executed command
+     + when a structured results format (e.g. junit) is configured:
+       - results file path
+       - results status (`ok`, `missing` or `invalid`) and error message
+       - list of test cases: name, classname, execution state (`PASS`, `FAIL` or `SKIP`), duration, message
  * debug run information
    - was debug run
    - replicated list of binaries which debug was run for
@@ -109,7 +117,7 @@ it is published.
 
 ```json
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "testrig_version": "0.0.7",
   "run_uuid": "018f9a1c-7b3e-7c2a-9f4d-3a1b2c4d5e6f",
   "start_time": "2026-08-19T17:00:00+00:00",

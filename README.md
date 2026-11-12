@@ -48,7 +48,9 @@ Example:
 
 Testrig uses [TOML](https://toml.io/en/) for declaring rig information. The exact format should be considered unstable and likely to change between releases.
 
-Each rig has a top-level `name` and one section per supported distro (for example `[ubuntu]` or `[fedora]`). A distro section declares:
+Each rig has a top-level `name` and one section per supported distro (for example `[ubuntu]` or `[fedora]`). A distro section may set `runner` to choose the kind of test: `binary` (the default) or `script`.
+
+A `binary` distro section declares:
 
   * `test_binary_path` - the directory containing the test entry points
   * `test_binaries` - an allowlist of entry point names to run. Each name is combined with `test_binary_path` to build an absolute path to the binary. Only the binaries listed here are executed.
@@ -71,6 +73,56 @@ extra_env_var = {HSA_ENABLE_SDMA = "0", LD_LIBRARY_PATH = "/opt/rocm/lib"}
 ```
 
 With the above, testrig runs `/opt/rocm/bin/test_foo` and `/opt/rocm/bin/test_bar`.
+
+### Script tests
+
+For tests written in Python, bash or another interpreted language, set `runner = "script"`:
+
+  * `tests` - an allowlist of script names to run, combined with `test_path`
+  * `test_path` - optional directory containing the scripts; relative paths are resolved against the rig file's directory (default: that directory)
+  * `interpreter` - optional command to run each script with, as a string (`"python3 -u"`) or list (`["bash", "-eu"]`). If omitted, scripts must be executable and are run via their shebang.
+  * `test_packages` - optional list of packages required to run the scripts
+  * `extra_env_var` - same as for binary tests
+
+```toml
+name = "my-script-rig"
+
+[fedora]
+runner = "script"
+interpreter = "python3"
+test_path = "tests"
+tests = ["check_devices.py", "check_hip.py"]
+test_packages = ["python3-numpy"]
+```
+
+Debug information gathering (gdb) is skipped for script tests. See `example/trivial/runtest-script.toml` for a working example.
+
+### Per-test-case results
+
+By default a test's result comes only from its exit code. Set the top-level `results = "junit"` to have testrig read a JUnit XML file written by each test (pytest, gtest and ctest formats are supported). testrig picks the path and passes it to the test in two ways:
+
+  * the placeholder `{results_file}`, replaced anywhere in `interpreter` or `extra_args`
+  * the environment variable `TESTRIG_RESULTS_FILE`, for custom scripts
+
+```toml
+name = "my-pytest-rig"
+results = "junit"
+
+[fedora]
+runner = "script"
+interpreter = "python3 -m pytest --junitxml={results_file}"
+tests = ["test_devices.py"]
+test_packages = ["python3-pytest"]
+```
+
+For a gtest binary use `extra_args = ["--gtest_output=xml:{results_file}"]`. Each test's state is then:
+
+  * `FAIL` - non-zero exit code (including crashes, whether or not results were written)
+  * `WARN` - exit code 0, but a case failed or the results file was missing or unreadable
+  * `SKIP` - exit code 0 and every case was skipped
+  * `PASS` - otherwise
+
+`WARN` tests are reported but don't cause a non-zero testrig exit code or a debug run. Results files are kept in the run output directory when file output is enabled. See `example/trivial/runtest-junit.toml`.
 
 
 ## Run Tests

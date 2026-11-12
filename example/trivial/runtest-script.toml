@@ -1,0 +1,15 @@
+name = "trivial-scripts"
+
+# Script tests live next to this file: test_path is resolved relative to it.
+# Without "interpreter", each script must be executable and have a shebang;
+# set e.g. interpreter = "python3 -u" to run every test through an interpreter.
+
+[fedora]
+runner = "script"
+tests = ["trivialtool.py", "trivial.sh"]
+test_packages = ["python3-click"]
+
+[ubuntu]
+runner = "script"
+tests = ["trivialtool.py", "trivial.sh"]
+test_packages = ["python3-click"]

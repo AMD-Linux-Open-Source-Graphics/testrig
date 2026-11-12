@@ -144,6 +144,9 @@ def run_test(ctx, no_debug):
 
     results = rig.execute(force_debug=ctx.obj["debug"], disable_debug=disable_debug)
 
+    if results["warned"]:
+        logger.warning("tests exited successfully but reported problems (WARN): {}".format(" ".join(results["warned"])))
+
     if len(results["failed"]) > 0:
         if not no_debug and not disable_debug:
             rig.gather_debug_info(results["failed"])

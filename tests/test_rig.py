@@ -345,6 +345,7 @@ class TestExecuteBinary:
 # ==========================================================================
 
 
+@pytest.mark.usefixtures("assume_binaries_present")
 class TestGpuSampleSink:
     def test_lazy_sink_does_not_create_file_until_write(self, tmp_path):
         from testrig.rig import _LazyJsonlSink
@@ -389,6 +390,7 @@ class TestGpuSampleSink:
 # ==========================================================================
 
 
+@pytest.mark.usefixtures("assume_binaries_present")
 class TestGpuMonitoringLogging:
     def test_announces_enabled_and_output_path(self, tmp_path, caplog):
         run = Rig(
